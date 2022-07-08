@@ -8,19 +8,25 @@ const dotenv = require("dotenv");
 const yargs = require('yargs');
 const YAML = require('yamljs');
 
-const oas = YAML.load('./openapi.yaml');
-
 const argv = yargs
+    .option('input', {
+        alias: 'i',
+        description: 'Path to input file in yaml format.',
+        type: 'string'
+    })
     .option('path', {
         alias: 'p',
         description: 'Test an individual path (ex. /accounts).  Don\'t include the version in the path.',
         type: 'string'
     })
+    .demandOption(['input'])
     .help()
     .alias('help', 'h').argv;
 
 // Load environment variables from the .env file
 dotenv.config();
+
+const oas = YAML.load(argv.input);
 
 async function validatePath(httpClient, ajv, path, spec) {
     if ("get" in spec.paths[path] && !path.includes('{')) {

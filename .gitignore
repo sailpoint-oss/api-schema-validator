@@ -3,7 +3,7 @@ secrets.json
 .env
 
 # Logs
-results.txt
+*-results.txt
 logs
 *.log
 npm-debug.log*
