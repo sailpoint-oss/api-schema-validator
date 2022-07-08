@@ -11,7 +11,7 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "args": ["-p", "/beta/triggers"],
+            // "args": ["-p", "/beta/triggers"],
             "program": "${workspaceFolder}/validator.js"
         }
     ]

@@ -1,12 +1,14 @@
 // import SwaggerClient from 'swagger-client';
 
 const SwaggerClient = require('swagger-client');
-const oas = require('./swagger.json');
 const axios = require('axios').default;
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const dotenv = require("dotenv");
 const yargs = require('yargs');
+const YAML = require('yamljs');
+
+const oas = YAML.load('./openapi.yaml');
 
 const argv = yargs
     .option('path', {
@@ -61,8 +63,15 @@ async function validatePath(httpClient, ajv, path, spec) {
                     return undefined;
                 }
 
-                const validate = ajv.compile(schema);
-                const isValid = validate(res.data)
+                let validate = undefined;
+                try {
+                    validate = ajv.compile(schema);
+                } catch (error) {
+                    uniqueErrors.errors['Invalid schema'] = error.message;
+                    return uniqueErrors;
+                }
+
+                const isValid = validate(res.data);
 
                 if (!isValid) {
                     // Since there can be up to 250 items in the response data, we don't want to have 
@@ -113,6 +122,8 @@ async function main() {
     const ajv = new Ajv({
         allErrors: true,
         strictRequired: true,
+        strictTypes: true,
+        validateFormats: true,
         verbose: true
     });
     addFormats(ajv);
@@ -136,10 +147,10 @@ async function main() {
     results = await Promise.all(validations);
     totalErrors = 0;
     results.forEach(result => {
-        if (result) { // API errors return an undefined result
+        if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
             console.log(`Errors found in ${result.method} ${result.endpoint}`);
             for (error in result.errors) {
-                console.error(`  - ${result.errors[error]}`);
+                console.log(`  - ${result.errors[error]}`);
                 totalErrors += 1;
             }
             console.log(); // Add a newline to make output easier to read

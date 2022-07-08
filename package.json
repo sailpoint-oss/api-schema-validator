@@ -19,9 +19,10 @@
   "dependencies": {
     "ajv": "8.10.0",
     "ajv-formats": "2.1.1",
-    "swagger-client": "3.18.4",
     "axios": "0.26.1",
     "dotenv": "^16.0.1",
-    "yargs": "^17.5.1"
+    "swagger-client": "3.18.4",
+    "yargs": "^17.5.1",
+    "yamljs": "^0.3.0"
   }
 }
