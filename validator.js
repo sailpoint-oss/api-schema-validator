@@ -19,12 +19,21 @@ const argv = yargs
         description: 'Test an individual path (ex. /accounts).  Don\'t include the version in the path.',
         type: 'string'
     })
+    .option('env', {
+        alias: 'e',
+        description: 'Path to the environment file',
+        type: 'string'
+    })
     .demandOption(['input'])
     .help()
     .alias('help', 'h').argv;
 
 // Load environment variables from the .env file
-dotenv.config();
+if (argv.env) {
+    dotenv.config({ path: argv.env });
+} else {
+    dotenv.config();
+}
 
 const oas = YAML.load(argv.input);
 
