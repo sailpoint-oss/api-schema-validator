@@ -36,8 +36,8 @@ file_path_length () {
 }
 
 # Build the API spec
-speccy resolve ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
-speccy resolve ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
+speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
+speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
 
 cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
