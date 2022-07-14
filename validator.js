@@ -24,6 +24,19 @@ const argv = yargs
         description: 'Path to the environment file',
         type: 'string'
     })
+    .option('client-id', {
+        description: 'The client ID of the personal access token to use for authentication',
+        type: 'string'
+    })
+    .option('client-secret', {
+        description: 'The client secret of the personal access token to use for authentication',
+        type: 'string'
+    })
+    .option('tenant', {
+        alias: 't',
+        description: 'The tenant to run the tests against',
+        type: 'string'
+    })
     .demandOption(['input'])
     .help()
     .alias('help', 'h').argv;
@@ -33,6 +46,19 @@ if (argv.env) {
     dotenv.config({ path: argv.env });
 } else {
     dotenv.config();
+}
+
+// If certain variables aren't loaded from the env file, then check if they are passed in the args
+if (!process.env.CLIENT_ID && argv['client-id']) {
+    process.env.CLIENT_ID = argv['client-id'];
+}
+
+if (!process.env.CLIENT_SECRET && argv['client-secret']) {
+    process.env.CLIENT_SECRET = argv['client-secret'];
+}
+
+if (!process.env.TENANT && argv['tenant']) {
+    process.env.TENANT = argv['tenant'];
 }
 
 const oas = YAML.load(argv.input);
