@@ -202,6 +202,7 @@ async function main() {
     if (totalErrors > 0) {
         markdown += `Total errors: ${totalErrors}`;
         console.log(markdown);
+        process.exit(1);
     }
 }
 
