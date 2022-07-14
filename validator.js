@@ -108,7 +108,7 @@ async function validatePath(httpClient, ajv, path, spec) {
             console.log(`Path ${path} uses ${JSON.stringify(contentType)} instead of application/json.  Skipping.`);
         }
     } else {
-        console.log(`Path ${path} must have a GET operation and no path parameters. Skipping...`);
+        // console.log(`Path ${path} must have a GET operation and no path parameters. Skipping...`);
         return undefined;
     }
 }
@@ -159,19 +159,24 @@ async function main() {
         }
     }
 
-    results = await Promise.all(validations);
-    totalErrors = 0;
+    const results = await Promise.all(validations);
+    let totalErrors = 0;
+    let markdown = "";
     results.forEach(result => {
         if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
-            console.log(`Errors found in ${result.method} ${result.endpoint}`);
+            markdown += `**Errors found in ${result.method} ${result.endpoint}**\n\n`;
             for (error in result.errors) {
-                console.log(`  - ${result.errors[error]}`);
+                markdown += `- ${result.errors[error]}\n`;
                 totalErrors += 1;
             }
-            console.log(); // Add a newline to make output easier to read
+            markdown += "\n";
         }
     });
-    console.log(`Total errors: ${totalErrors}`);
+
+    if (totalErrors > 0) {
+        markdown += `Total errors: ${totalErrors}`;
+        console.log(markdown);
+    }
 }
 
 
