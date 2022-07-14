@@ -8,60 +8,74 @@ const dotenv = require("dotenv");
 const yargs = require('yargs');
 const YAML = require('yamljs');
 
-const argv = yargs
-    .option('input', {
-        alias: 'i',
-        description: 'Path to input file in yaml format.',
-        type: 'string'
-    })
-    .option('path', {
-        alias: 'p',
-        description: 'Test an individual path (ex. /accounts).  Don\'t include the version in the path.',
-        type: 'string'
-    })
-    .option('env', {
-        alias: 'e',
-        description: 'Path to the environment file',
-        type: 'string'
-    })
-    .option('client-id', {
-        description: 'The client ID of the personal access token to use for authentication',
-        type: 'string'
-    })
-    .option('client-secret', {
-        description: 'The client secret of the personal access token to use for authentication',
-        type: 'string'
-    })
-    .option('tenant', {
-        alias: 't',
-        description: 'The tenant to run the tests against',
-        type: 'string'
-    })
-    .demandOption(['input'])
-    .help()
-    .alias('help', 'h').argv;
+function getArgs() {
+    const argv = yargs
+        .option('input', {
+            alias: 'i',
+            description: 'Path to input file in yaml format.',
+            type: 'string'
+        })
+        .option('path', {
+            alias: 'p',
+            description: 'Test an individual path (ex. /accounts).  Don\'t include the version in the path.',
+            type: 'string'
+        })
+        .option('env', {
+            alias: 'e',
+            description: 'Path to the environment file',
+            type: 'string'
+        })
+        .option('client-id', {
+            description: 'The client ID of the personal access token to use for authentication',
+            type: 'string'
+        })
+        .option('client-secret', {
+            description: 'The client secret of the personal access token to use for authentication',
+            type: 'string'
+        })
+        .option('tenant', {
+            alias: 't',
+            description: 'The tenant to run the tests against',
+            type: 'string'
+        })
+        .demandOption(['input'])
+        .help()
+        .alias('help', 'h').argv;
 
-// Load environment variables from the .env file
-if (argv.env) {
-    dotenv.config({ path: argv.env });
-} else {
-    dotenv.config();
+    // Load environment variables from the .env file
+    if (argv.env) {
+        dotenv.config({ path: argv.env });
+    } else {
+        dotenv.config();
+    }
+
+    // Overwrite these env variables if they are passed as CLI options
+    if (argv['client-id']) {
+        process.env.CLIENT_ID = argv['client-id'];
+    }
+    if (argv['client-secret']) {
+        process.env.CLIENT_SECRET = argv['client-secret'];
+    }
+    if (argv['tenant']) {
+        process.env.TENANT = argv['tenant'];
+    }
+
+    // Stop the program if certain variables aren't present
+    if (!process.env.CLIENT_ID) {
+        console.log('Missing client ID.  A client ID must be provided as an env variable, in the .env file, or as a CLI option.');
+        process.exit(1);
+    }
+    if (!process.env.CLIENT_SECRET) {
+        console.log('Missing client secret.  A client secret must be provided as an env variable, in the .env file, or as a CLI option.');
+        process.exit(1);
+    }
+    if (!process.env.TENANT) {
+        console.log('Missing tenant.  A tenant must be provided as an env variable, in the .env file, or as a CLI option.');
+        process.exit(1);
+    }
+
+    return argv;
 }
-
-// If certain variables aren't loaded from the env file, then check if they are passed in the args
-if (!process.env.CLIENT_ID && argv['client-id']) {
-    process.env.CLIENT_ID = argv['client-id'];
-}
-
-if (!process.env.CLIENT_SECRET && argv['client-secret']) {
-    process.env.CLIENT_SECRET = argv['client-secret'];
-}
-
-if (!process.env.TENANT && argv['tenant']) {
-    process.env.TENANT = argv['tenant'];
-}
-
-const oas = YAML.load(argv.input);
 
 async function validatePath(httpClient, ajv, path, spec) {
     if ("get" in spec.paths[path] && !path.includes('{')) {
@@ -150,6 +164,8 @@ async function getAccessToken() {
 }
 
 async function main() {
+    const argv = getArgs();
+    const oas = YAML.load(argv.input);
     result = await SwaggerClient.resolve({ spec: oas, allowMetaPatches: false });
     spec = result.spec;
 
