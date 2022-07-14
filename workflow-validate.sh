@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Requires Node v16
+# This is meant to be run inside a github workflow.
 
-BRANCH=$1
+# Requires Node v16
 
 validate_paths () {
     FILE_PATHS=$@
@@ -35,28 +35,12 @@ file_path_length () {
     echo $1 | tr "/" " " | wc -w
 }
 
-rm -rf cloud-api-client-common
-rm v3.yaml
-rm beta.yaml
-
-git clone git@github.com:colin-mckibben-sp/cloud-api-client-common.git
-
-# Switch to a different branch and build the API spec
-cd cloud-api-client-common
-git switch $BRANCH
-cd ../
-
 # Build the API spec
-speccy resolve cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
-speccy resolve cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
+speccy resolve ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
+speccy resolve ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
 
-cd cloud-api-client-common
+cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$(git diff --name-only HEAD master)
 
 validate_paths $CHANGED_FILES
-cd ../
-
-rm -rf cloud-api-client-common
-rm v3.yaml
-rm beta.yaml
