@@ -41,6 +41,6 @@ speccy resolve ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.
 
 cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
-CHANGED_FILES=$(git diff --name-only HEAD master)
+CHANGED_FILES=$@
 
 validate_paths $CHANGED_FILES
