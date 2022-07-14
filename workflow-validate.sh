@@ -20,7 +20,7 @@ validate_paths () {
         then
             # echo "Search for path in main spec"
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            echo "::set-output name=$API_PATH::$(node ../validator.js -i ../${VERSION}.yaml -p $API_PATH --markdown)"
+            echo "::set-output name=$API_PATH::$(node ../api-schema-validator/validator.js -i ../api-schema-validator/${VERSION}.yaml -p $API_PATH --markdown)"
             echo
         elif echo $FILE_PATH | grep schemas --quiet
         then
