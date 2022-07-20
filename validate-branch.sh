@@ -20,8 +20,8 @@ validate_paths () {
         then
             # echo "Search for path in main spec"
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --markdown
-            echo
+            ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --table-format)
+            echo "|${API_PATH}|${ERRORS}|"
         elif echo $FILE_PATH | grep schemas --quiet
         then
             MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
@@ -54,7 +54,13 @@ cd cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$(git diff --name-only HEAD master)
 
-validate_paths $CHANGED_FILES
+for CHANGED_FILE in $CHANGED_FILES
+do
+    echo "$CHANGED_FILE has been modified.  Testing each path that uses this file."
+    echo "| Path | Errors |"
+    echo "|-|-|"
+    validate_paths $CHANGED_FILE
+done
 cd ../
 
 rm -rf cloud-api-client-common

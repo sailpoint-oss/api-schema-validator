@@ -38,6 +38,10 @@ function getArgs() {
             description: 'The tenant to run the tests against',
             type: 'string'
         })
+        .option('table-format', {
+            description: 'Format the output for use in a markdown table',
+            type: 'string'
+        })
         .demandOption(['input'])
         .help()
         .alias('help', 'h').argv;
@@ -204,14 +208,15 @@ async function main() {
     const results = await Promise.all(validations);
     let totalErrors = 0;
     let markdown = "";
+    let newLine = "table-format" in argv ? "<br>" : "\n"
     results.forEach(result => {
         if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
-            markdown += `**Errors found in ${result.method} ${result.endpoint}**\n\n`;
+            markdown += `**Errors found in ${result.method} ${result.endpoint}**${newLine}${newLine}`;
             for (error in result.errors) {
-                markdown += `- ${result.errors[error]}\n`;
+                markdown += `- ${result.errors[error]}${newLine}`;
                 totalErrors += 1;
             }
-            markdown += "\n";
+            markdown += newLine;
         }
     });
 
