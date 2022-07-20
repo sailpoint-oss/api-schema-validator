@@ -60,6 +60,7 @@ do
     echo "| Path | Errors |"
     echo "|-|-|"
     validate_paths $CHANGED_FILE
+    echo "---" # Need a separator so the tables don't bleed together
 done
 cd ../
 
