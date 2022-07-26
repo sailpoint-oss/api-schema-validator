@@ -48,18 +48,10 @@ do
     VALIDATION=$(validate_paths $CHANGED_FILE)
     if echo $VALIDATION | grep "Expected that" --quiet
     then
-        echo "<details open>"
-        
-    else
-        echo "<details closed>"
+        echo "$CHANGED_FILE is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
+        echo "| Path | Errors |"
+        echo "|-|-|"
+        echo $VALIDATION
+        echo "---"
     fi
-
-    echo "<summary>$CHANGED_FILE validation errors: $(echo $VALIDATION | grep \"Expected that\" | wc -w)</summary>"
-    echo
-    echo "> $CHANGED_FILE has been modified. Testing each path that uses this file."
-    echo
-    echo "| Path | Errors |"
-    echo "|-|-|"
-    echo $VALIDATION
-    echo "</details>"
 done
