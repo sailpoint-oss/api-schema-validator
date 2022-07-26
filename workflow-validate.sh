@@ -55,7 +55,9 @@ do
     fi
 
     echo "<summary>$CHANGED_FILE validation errors: $(echo $VALIDATION | grep \"Expected that\" | wc -w)</summary>"
+    echo
     echo "> $CHANGED_FILE has been modified. Testing each path that uses this file."
+    echo
     echo "| Path | Errors |"
     echo "|-|-|"
     echo $VALIDATION
