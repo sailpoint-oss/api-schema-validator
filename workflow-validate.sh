@@ -4,6 +4,8 @@
 
 # Requires Node v16
 
+TESTED_PATHS=""
+
 validate_paths () {
     FILE_PATHS=$@
     # echo "\nProcess file paths: $FILE_PATHS"
@@ -20,8 +22,12 @@ validate_paths () {
         then
             # echo "Search for path in main spec"
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
-            echo $ERRORS
+            if ! echo $TESTED_PATHS | grep $API_PATH --quiet
+            then
+                ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
+                echo $ERRORS
+                TESTED_PATHS="$TESTED_PATHS $API_PATH"
+            fi
         elif echo $FILE_PATH | grep schemas --quiet
         then
             MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
