@@ -48,7 +48,7 @@ do
     VALIDATION=$(validate_paths $CHANGED_FILE)
     if echo $VALIDATION | grep "Expected that" --quiet
     then
-        echo "$CHANGED_FILE is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
+        echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
         echo "| Path | Errors |"
         echo "|-|-|"
         echo $VALIDATION
