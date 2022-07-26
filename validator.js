@@ -38,8 +38,8 @@ function getArgs() {
             description: 'The tenant to run the tests against',
             type: 'string'
         })
-        .option('table-format', {
-            description: 'Format the output for use in a markdown table',
+        .option('github-action', {
+            description: 'Format the output for use in the github action',
             type: 'string'
         })
         .demandOption(['input'])
@@ -126,7 +126,10 @@ async function validatePath(httpClient, ajv, path, spec) {
                 try {
                     validate = ajv.compile(schema);
                 } catch (error) {
-                    uniqueErrors.errors['Invalid schema'] = error.message;
+                    uniqueErrors.errors['Invalid schema'] = {
+                        'message': error.message,
+                        'data': null
+                    }
                     return uniqueErrors;
                 }
 
@@ -139,7 +142,10 @@ async function validatePath(httpClient, ajv, path, spec) {
                     validate.errors.forEach(error => {
                         if (!(error.schemaPath in uniqueErrors.errors)) {
                             message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
-                            uniqueErrors.errors[error.schemaPath] = message;
+                            uniqueErrors.errors[error.schemaPath] = {
+                                message,
+                                data: res.data[error.instancePath.split('/')[1]]
+                            }
                         }
                     });
                 }
@@ -165,6 +171,14 @@ async function getAccessToken() {
     });
 
     return res.data.access_token;
+}
+
+// Replace newlines with <br> and spaces with &nbsp;.  For use in markdown table.
+function formatData(data) {
+    const stringified = JSON.stringify(data, null, 2);
+    const newlines = stringified.replace(/\n/g, '<br>');
+    const spaces = newlines.replace(/\ /g, '&nbsp;');
+    return spaces;
 }
 
 async function main() {
@@ -207,22 +221,39 @@ async function main() {
 
     const results = await Promise.all(validations);
     let totalErrors = 0;
-    let markdown = "";
-    let newLine = "table-format" in argv ? "<br>" : "\n"
-    results.forEach(result => {
-        if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
-            markdown += `**Errors found in ${result.method} ${result.endpoint}**${newLine}${newLine}`;
-            for (error in result.errors) {
-                markdown += `- ${result.errors[error]}${newLine}`;
-                totalErrors += 1;
+    let output = "";
+
+    if ("github-action" in argv) {
+        results.forEach(result => {
+            if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
+                output += `|${result.method} ${result.endpoint}|`;
+                for (error in result.errors) {
+                    const data = formatData(result.errors[error].data);
+                    output += `<details closed><summary>${result.errors[error].message}</summary><pre>${data}</pre></details>`;
+                    totalErrors += 1;
+                }
+                output += "|\n";
             }
-            markdown += newLine;
+        });
+    } else {
+        results.forEach(result => {
+            if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
+                output += `Errors found in ${result.method} ${result.endpoint}\n\n`;
+                for (error in result.errors) {
+                    output += `- ${result.errors[error].message}\n`;
+                    totalErrors += 1;
+                }
+                output += "\n";
+            }
+        });
+
+        if (totalErrors > 0) {
+            output += `Total errors: ${totalErrors}`;
         }
-    });
+    }
 
     if (totalErrors > 0) {
-        markdown += `Total errors: ${totalErrors}`;
-        console.log(markdown);
+        console.log(output);
         process.exit(1);
     }
 }
