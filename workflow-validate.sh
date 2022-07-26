@@ -45,9 +45,19 @@ CHANGED_FILES=$@
 
 for CHANGED_FILE in $CHANGED_FILES
 do
-    echo "$CHANGED_FILE has been modified.  Testing each path that uses this file."
+    VALIDATION=$(validate_paths $CHANGED_FILE)
+    if echo $VALIDATION | grep "Expected that" --quiet
+    then
+        echo "<details open>"
+        
+    else
+        echo "<details closed>"
+    fi
+
+    echo "<summary>$CHANGED_FILE validation errors: $(echo $VALIDATION | grep \"Expected that\" | wc -w)</summary>"
+    echo "> $CHANGED_FILE has been modified. Testing each path that uses this file."
     echo "| Path | Errors |"
     echo "|-|-|"
-    validate_paths $CHANGED_FILE
-    echo "---" # Need a separator so the tables don't bleed together
+    echo $VALIDATION
+    echo "</details>"
 done
