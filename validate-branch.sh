@@ -18,10 +18,19 @@ validate_paths () {
         # it in the main API file.
         if echo $FILE_PATH | grep paths --quiet
         then
-            # echo "Search for path in main spec"
+            # # echo "Search for path in main spec"
+            # API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
+            # ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
+            # echo "|${API_PATH}|${ERRORS}|"
+            
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
-            echo "|${API_PATH}|${ERRORS}|"
+            # echo "Test if ${API_PATH}; in $TESTED_PATHS"
+            if ! cat tested_paths.txt | grep -x "$API_PATH"
+            then
+                ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
+                echo $ERRORS
+                echo $API_PATH >> tested_paths.txt
+            fi
         elif echo $FILE_PATH | grep schemas --quiet
         then
             MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
@@ -53,15 +62,21 @@ speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint
 cd cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$(git diff --name-only HEAD master)
+touch tested_paths.txt
 
 for CHANGED_FILE in $CHANGED_FILES
 do
-    echo "$CHANGED_FILE has been modified.  Testing each path that uses this file."
-    echo "| Path | Errors |"
-    echo "|-|-|"
-    validate_paths $CHANGED_FILE
-    echo "---" # Need a separator so the tables don't bleed together
+    VALIDATION=$(validate_paths $CHANGED_FILE)
+    if echo $VALIDATION | grep "Expected that" --quiet
+    then
+        echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
+        echo "| Path | Errors |"
+        echo "|-|-|"
+        echo $VALIDATION
+        echo "---"
+    fi
 done
+
 cd ../
 
 rm -rf cloud-api-client-common

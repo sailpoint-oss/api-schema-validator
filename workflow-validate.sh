@@ -22,11 +22,11 @@ validate_paths () {
         then
             # echo "Search for path in main spec"
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            if ! echo $TESTED_PATHS | grep $API_PATH --quiet
+            if ! cat tested_paths.txt | grep -x "$API_PATH"
             then
                 ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
                 echo $ERRORS
-                TESTED_PATHS="$TESTED_PATHS $API_PATH"
+                echo $API_PATH >> tested_paths.txt
             fi
         elif echo $FILE_PATH | grep schemas --quiet
         then
@@ -48,6 +48,7 @@ speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpo
 cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$@
+touch tested_paths.txt
 
 for CHANGED_FILE in $CHANGED_FILES
 do
