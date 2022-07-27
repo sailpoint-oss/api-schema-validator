@@ -6,10 +6,8 @@ BRANCH=$1
 
 validate_paths () {
     FILE_PATHS=$@
-    # echo "\nProcess file paths: $FILE_PATHS"
     for FILE_PATH in $FILE_PATHS
     do
-        # echo $FILE_PATH
         FILE_PATH_LENGTH=$(file_path_length $FILE_PATH)
         VERSION=$(echo $FILE_PATH | cut -d "/" -f 5)
         FILE_NAME=$(echo $FILE_PATH | cut -d "/" -f $FILE_PATH_LENGTH)
@@ -18,13 +16,7 @@ validate_paths () {
         # it in the main API file.
         if echo $FILE_PATH | grep paths --quiet
         then
-            # # echo "Search for path in main spec"
-            # API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            # ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
-            # echo "|${API_PATH}|${ERRORS}|"
-            
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            # echo "Test if ${API_PATH}; in $TESTED_PATHS"
             if ! cat tested_paths.txt | grep -x "$API_PATH"
             then
                 ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
@@ -34,7 +26,6 @@ validate_paths () {
         elif echo $FILE_PATH | grep schemas --quiet
         then
             MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
-            # echo "Continue path search"
             validate_paths $MATCHING_FILE_PATHS
         fi
     done
