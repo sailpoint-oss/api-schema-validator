@@ -18,11 +18,15 @@ In order to use this tool, the following dependencies must be installed.
 
 Start by cloning this repository onto your machine:
 
-`git clone https://github.com/sailpoint-oss/api-schema-validator.git`
+```
+git clone https://github.com/sailpoint-oss/api-schema-validator.git
+```
 
 Change directory into the repository and install the NPM packages.
 
-`npm install`
+```
+npm install
+```
 
 Create a `.env` file in the root of the project folder to hold the secret values for your target API server.  This code is designed to work with IdentityNow, so you will need to provide the client ID and secret of your [personal access token](https://developer.sailpoint.com/docs/authentication.html#overview), along with the name of your tenant.
 
@@ -40,7 +44,9 @@ This repository contains the validator code (`validator.js`) along with shell sc
 
 To run the validator, execute the following command in your terminal:
 
-`node validator.js -i {path/to/spec.yaml}`
+```
+node validator.js -i {path/to/spec.yaml}
+```
 
 This will run the validator on every path that has a **GET** operation and no path parameters, and will output the results to the console.  The spec must be in yaml format.  This program provides several CLI options, which you can view by running `node validator.js -h`.
 
