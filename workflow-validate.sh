@@ -51,7 +51,7 @@ do
     VALIDATION=$(validate_paths $CHANGED_FILE)
     if echo $VALIDATION | grep "Expected that" --quiet
     then
-        echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
+        echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below.  For more information on this PR check, please see the [API schema validator README](https://github.com/sailpoint/cloud-api-client-common#api-schema-validator).  For a list of common error messages and how to fix them, please [see this section in the README](https://github.com/sailpoint/cloud-api-client-common#common-api-validator-errors)."
         echo "| Path | Errors |"
         echo "|-|-|"
         echo $VALIDATION
