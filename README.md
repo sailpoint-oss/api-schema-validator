@@ -58,6 +58,10 @@ This helper script is designed to work for SailPoint's environment.  It clones t
 
 This helper script works almost the same as `validate-master.sh`.  The only difference is that is accepts one argument that specifies the branch to validate, and it will only validate the files that have changed in the branch.  This is useful if you want to test just the changes that were made in a branch instead of the entire specification.
 
+```sh
+sh validate-branch.sh "jv/idnwaimea-10182"
+```
+
 ### workflow-validate.sh
 
 This script is meant to be run in a Github action.  It is similar to `validate-branch.sh` in that it will only validate the files that are changed in the pull request that triggers the action.  It will output any violations in a formatted Github comment.
