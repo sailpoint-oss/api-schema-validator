@@ -39,7 +39,7 @@ rm -rf cloud-api-client-common
 rm v3.yaml
 rm beta.yaml
 
-git clone git@github.com:colin-mckibben-sp/cloud-api-client-common.git
+git clone git@github.com:sailpoint/cloud-api-client-common.git
 
 # Switch to a different branch and build the API spec
 cd cloud-api-client-common

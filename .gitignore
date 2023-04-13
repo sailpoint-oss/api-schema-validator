@@ -1,9 +1,13 @@
+# Output files
+beta.yaml
+v3.yaml
 # Secret files
 secrets.json
 .env
 
 # Logs
 *-results.txt
+*-results.md
 logs
 *.log
 npm-debug.log*

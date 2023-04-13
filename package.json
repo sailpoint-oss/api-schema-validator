@@ -21,8 +21,9 @@
     "ajv-formats": "2.1.1",
     "axios": "0.26.1",
     "dotenv": "^16.0.1",
+    "nvm": "^0.0.4",
     "swagger-client": "3.18.4",
-    "yargs": "^17.5.1",
-    "yamljs": "^0.3.0"
+    "yamljs": "^0.3.0",
+    "yargs": "^17.5.1"
   }
 }
