@@ -81,79 +81,84 @@ function getArgs() {
     return argv;
 }
 
+async function validateSchema(httpClient, ajv, path, spec) {
+    const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
+    res = await httpClient.get(path).catch(error => {
+        if (error) {
+            const method = error.response.request.method;
+            const endpoint = error.response.request.path;
+            console.log(`${method} ${endpoint}`);
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                console.log(error.response.data);
+                console.log(error.response.status);
+                console.log(error.response.headers);
+            } else if (error.request) {
+                // The request was made but no response was received
+                console.log(error.request);
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                console.log('Error', error.message);
+            }
+        } else {
+            console.log(`A serious error occurred for ${path}`);
+        }
+    });
+
+    if (res) {
+        uniqueErrors = {
+            method: res.request.method,
+            endpoint: res.request.path,
+            errors: {}
+        };
+
+        // TODO: Fix the workflows creator/owner enum issue and then remove this code.
+        if (!ajv.validateSchema(schema)) {
+            console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
+            return undefined;
+        }
+
+        let validate = undefined;
+        try {
+            validate = ajv.compile(schema);
+        } catch (error) {
+            uniqueErrors.errors['Invalid schema'] = {
+                'message': error.message,
+                'data': null
+            }
+            return uniqueErrors;
+        }
+
+        const isValid = validate(res.data);
+
+        if (!isValid) {
+            // Since there can be up to 250 items in the response data, we don't want to have 
+            // the same error message appear multiple times.
+            // This will allow us to have one error for each unique schema violation.
+            validate.errors.forEach(error => {
+                if (!(error.schemaPath in uniqueErrors.errors)) {
+                    message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
+                    uniqueErrors.errors[error.schemaPath] = {
+                        message,
+                        data: res.data[error.instancePath.split('/')[1]]
+                    }
+                }
+            });
+        }
+
+        return uniqueErrors;
+    } else {
+        return undefined;
+    }
+}
+
 async function validatePath(httpClient, ajv, path, spec) {
     if ("get" in spec.paths[path] && !path.includes('{')) {
         const contentType = spec.paths[path].get.responses['200'].content;
         if ("application/json" in contentType) {
-            const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
-            res = await httpClient.get(path).catch(error => {
-                if (error) {
-                    const method = error.response.request.method;
-                    const endpoint = error.response.request.path;
-                    console.log(`${method} ${endpoint}`);
-                    if (error.response) {
-                        // The request was made and the server responded with a status code
-                        // that falls out of the range of 2xx
-                        console.log(error.response.data);
-                        console.log(error.response.status);
-                        console.log(error.response.headers);
-                    } else if (error.request) {
-                        // The request was made but no response was received
-                        console.log(error.request);
-                    } else {
-                        // Something happened in setting up the request that triggered an Error
-                        console.log('Error', error.message);
-                    }
-                } else {
-                    console.log(`A serious error occurred for ${path}`);
-                }
-            });
-
-            if (res) {
-                uniqueErrors = {
-                    method: res.request.method,
-                    endpoint: res.request.path,
-                    errors: {}
-                };
-
-                // TODO: Fix the workflows creator/owner enum issue and then remove this code.
-                if (!ajv.validateSchema(schema)) {
-                    console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
-                    return undefined;
-                }
-
-                let validate = undefined;
-                try {
-                    validate = ajv.compile(schema);
-                } catch (error) {
-                    uniqueErrors.errors['Invalid schema'] = {
-                        'message': error.message,
-                        'data': null
-                    }
-                    return uniqueErrors;
-                }
-
-                const isValid = validate(res.data);
-
-                if (!isValid) {
-                    // Since there can be up to 250 items in the response data, we don't want to have 
-                    // the same error message appear multiple times.
-                    // This will allow us to have one error for each unique schema violation.
-                    validate.errors.forEach(error => {
-                        if (!(error.schemaPath in uniqueErrors.errors)) {
-                            message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
-                            uniqueErrors.errors[error.schemaPath] = {
-                                message,
-                                data: res.data[error.instancePath.split('/')[1]]
-                            }
-                        }
-                    });
-                }
-
-                return uniqueErrors;
-            } else {
-                return undefined;
-            }
+            const schemaErrors = await validateSchema(httpClient, ajv, path, spec);
+            return schemaErrors;
         } else {
             console.log(`Path ${path} uses ${JSON.stringify(contentType)} instead of application/json.  Skipping.`);
         }
@@ -223,6 +228,7 @@ async function main() {
     let totalErrors = 0;
     let output = "";
 
+    // Build the comment that will be added to the GitHub PR if there are any errors.
     if ("github-action" in argv) {
         results.forEach(result => {
             if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
