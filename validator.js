@@ -2,6 +2,7 @@
 
 const SwaggerClient = require('swagger-client');
 const axios = require('axios').default;
+const axiosRetry = require('axios-retry')
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const dotenv = require("dotenv");
@@ -589,6 +590,16 @@ async function main() {
         timeout: 20000, // Some endpoints can take up to 10 seconds to complete
         headers: { 'Authorization': `Bearer ${access_token}` }
     });
+    axiosRetry(instance, { 
+        retries: 50,
+        retryDelay: (retryCount) => {
+            console.log(`retry attempt: ${retryCount}`);
+            return 10000; // time interval between retries
+        },
+        retryCondition: (error) => {
+            return error.response.status === 429;
+        }
+    });
 
     const ajv = new Ajv({
         allErrors: true,
@@ -611,7 +622,7 @@ async function main() {
         }
     } else { // Test all paths
         for (const path in spec.paths) {
-            validations.push(validatePath(instance, ajv, path, argv.skipSchema, argv.skipFilters));
+            validations.push(validatePath(instance, ajv, path, spec, argv.skipSchema, argv.skipFilters));
         }
     }
 
