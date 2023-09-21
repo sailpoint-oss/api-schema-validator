@@ -9,43 +9,6 @@ const yargs = require('yargs');
 const YAML = require('yamljs');
 
 
-// Find all top level attributes within the response schema that are not arrays or objects
-// Assign the correct subset of operators that are applicable to each type of property.
-// TODO: Support arrays and objects
-function getFilterableProperties(schema) {
-    let filterableProperties = {}
-    // Since filters only work for list endpoints, the schema will always be an array of items.
-    // Dive into the array to get the schema.
-    for (const [property, propertySchema] of Object.entries(schema['items']['properties'])) {
-        if (propertySchema.type === 'string') {
-            filterableProperties[property] = {
-                type: propertySchema.type,
-                operators: ['co', 'eq', 'ge', 'gt', 'in','le', 'lt', 'ne', 'pr', 'sw'],
-                supported: [],
-                unsupported: []
-            }
-        } else if (propertySchema.type === 'boolean') {
-            filterableProperties[property] = {
-                type: propertySchema.type,
-                operators: ['eq', 'ne', 'pr'],
-                supported: [],
-                unsupported: []
-            }
-        } else if (propertySchema.type === 'number') {
-            filterableProperties[property] = {
-                type: propertySchema.type,
-                operators: ['eq', 'ne', 'pr', 'gt', 'ge', 'lt', 'le'],
-                supported: [],
-                unsupported: []
-            }
-        } else {
-            console.debug("objects and arrays not yet supported")
-        }
-    }
-
-    return filterableProperties;
-}
-
 function getArgs() {
     const argv = yargs
         .option('input', {
@@ -79,6 +42,16 @@ function getArgs() {
         .option('github-action', {
             description: 'Format the output for use in the github action',
             type: 'string'
+        })
+        .option('skip-filters', {
+            description: "Don't run the filter query param validator",
+            type: 'boolean',
+            default: false
+        })
+        .option('skip-schema', {
+            description: "Don't run the schema validator",
+            type: 'boolean',
+            default: false
         })
         .demandOption(['input'])
         .help()
@@ -119,6 +92,41 @@ function getArgs() {
     return argv;
 }
 
+// Find all top level attributes within the response schema that are not arrays or objects
+// Assign the correct subset of operators that are applicable to each type of property.
+// TODO: Support arrays and objects
+function getFilterableProperties(schema) {
+    let filterableProperties = {}
+    // Since filters only work for list endpoints, the schema will always be an array of items.
+    // Dive into the array to get the schema.
+    for (const [property, propertySchema] of Object.entries(schema['items']['properties'])) {
+        if (propertySchema.type === 'string') {
+            filterableProperties[property] = {
+                type: propertySchema.type,
+                operators: ['co', 'eq', 'ge', 'gt', 'in','le', 'lt', 'ne', 'pr', 'sw'],
+                supported: [],
+                unsupported: []
+            }
+        } else if (propertySchema.type === 'boolean') {
+            filterableProperties[property] = {
+                type: propertySchema.type,
+                operators: ['eq', 'ne', 'pr'],
+                supported: [],
+                unsupported: []
+            }
+        } else if (propertySchema.type === 'number') {
+            filterableProperties[property] = {
+                type: propertySchema.type,
+                operators: ['eq', 'ne', 'pr', 'gt', 'ge', 'lt', 'le'],
+                supported: [],
+                unsupported: []
+            }
+        }
+    }
+
+    return filterableProperties;
+}
+
 function parseFilters(description) {
     const filters = {};
     const lines = description.split("\n");
@@ -156,12 +164,13 @@ function handleResError(error) {
     }
 }
 
+// Contains
 async function testCo(httpClient, controlRes, property, path, propertiesToTest) {
     const example = controlRes.data.filter(item => property in item)[0][property]
     if (typeof example === "string") {
-        const partial = example.substring(0, example.length - 1)
+        const partial = example.substring(example.length / 3, example.length / 2)
         const res = await httpClient.get(path, { params: { filters: `${property} co "${partial}"`}})
-        const badMatches = res.data.filter(item => item[property] !== example)
+        const badMatches = res.data.filter(item => !item[property].includes(partial))
         if (badMatches.length > 0) {
             propertiesToTest[property].unsupported.push('co')
         } else {
@@ -172,6 +181,7 @@ async function testCo(httpClient, controlRes, property, path, propertiesToTest) 
     } 
 }
 
+// Equals
 async function testEq(httpClient, controlRes, property, path, propertiesToTest) {
     const example = controlRes.data.filter(item => property in item)[0][property]
 
@@ -190,6 +200,45 @@ async function testEq(httpClient, controlRes, property, path, propertiesToTest) 
     }
 }
 
+// Greater than or equal
+async function testGe(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    if (typeof example === "string") {
+        res = await httpClient.get(path, { params: { filters: `${property} ge "${example}"`}})
+    } else {
+        res = await httpClient.get(path, { params: { filters: `${property} ge ${example}`}})
+    }
+
+    const badMatches = res.data.filter(item => item[property] < example)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('ge')
+    } else {
+        propertiesToTest[property].supported.push('ge')
+    }
+}
+
+// Greater than
+async function testGt(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    if (typeof example === "string") {
+        res = await httpClient.get(path, { params: { filters: `${property} gt "${example}"`}})
+    } else {
+        res = await httpClient.get(path, { params: { filters: `${property} gt ${example}`}})
+    }
+
+    const badMatches = res.data.filter(item => item[property] <= example)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('gt')
+    } else {
+        propertiesToTest[property].supported.push('gt')
+    }
+}
+
+// Item in array
 async function testIn(httpClient, controlRes, property, path, propertiesToTest) {
     const example = controlRes.data.filter(item => property in item)[0][property]
 
@@ -206,6 +255,95 @@ async function testIn(httpClient, controlRes, property, path, propertiesToTest) 
     } else {
         propertiesToTest[property].supported.push('in')
     }
+}
+
+// Less than or equal to
+async function testLe(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    if (typeof example === "string") {
+        res = await httpClient.get(path, { params: { filters: `${property} le "${example}"`}})
+    } else {
+        res = await httpClient.get(path, { params: { filters: `${property} le ${example}`}})
+    }
+
+    const badMatches = res.data.filter(item => item[property] > example)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('le')
+    } else {
+        propertiesToTest[property].supported.push('le')
+    }
+}
+
+// Less than
+async function testLt(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    if (typeof example === "string") {
+        res = await httpClient.get(path, { params: { filters: `${property} lt "${example}"`}})
+    } else {
+        res = await httpClient.get(path, { params: { filters: `${property} lt ${example}`}})
+    }
+
+    const badMatches = res.data.filter(item => item[property] >= example)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('lt')
+    } else {
+        propertiesToTest[property].supported.push('lt')
+    }
+}
+
+// Not equals
+async function testNe(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    if (typeof example === "string") {
+        res = await httpClient.get(path, { params: { filters: `${property} ne "${example}"`}})
+    } else {
+        res = await httpClient.get(path, { params: { filters: `${property} ne ${example}`}})
+    }
+
+    const badMatches = res.data.filter(item => item[property] === example)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('ne')
+    } else {
+        propertiesToTest[property].supported.push('ne')
+    }
+}
+
+// Is present
+async function testPr(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+
+    let res = undefined
+    res = await httpClient.get(path, { params: { filters: `pr ${property}`}})
+
+    const badMatches = res.data.filter(item => item[property] == null)
+    if (badMatches.length > 0) {
+        propertiesToTest[property].unsupported.push('pr')
+    } else {
+        propertiesToTest[property].supported.push('pr')
+    }
+}
+
+// Starts with
+async function testSw(httpClient, controlRes, property, path, propertiesToTest) {
+    const example = controlRes.data.filter(item => property in item)[0][property]
+    if (typeof example === "string") {
+        const partial = example.substring(0, example.length / 2)
+        const res = await httpClient.get(path, { params: { filters: `${property} sw "${partial}"`}})
+        const badMatches = res.data.filter(item => item[property].substring(0, example.length / 2) !== partial)
+        if (badMatches.length > 0) {
+            propertiesToTest[property].unsupported.push('sw')
+        } else {
+            propertiesToTest[property].supported.push('sw')
+        }
+    } else {
+        propertiesToTest[property].unsupported.push('sw')
+    } 
 }
 
 async function testFilters(httpClient, path, propertiesToTest) {
@@ -229,11 +367,60 @@ async function testFilters(httpClient, path, propertiesToTest) {
                         propertiesToTest[property].unsupported.push('eq')
                     }
                     break;
+                case 'ge':
+                    try {
+                        await testGe(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('ge')
+                    }
+                    break;
+                case 'gt':
+                    try {
+                        await testGt(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('gt')
+                    }
+                    break;
                 case 'in':
                     try {
                         await testIn(httpClient, controlRes, property, path, propertiesToTest)
                     } catch (error) {
                         propertiesToTest[property].unsupported.push('in')
+                    }
+                    break;
+                case 'le':
+                    try {
+                        await testLe(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('le')
+                    }
+                    break;
+                case 'lt':
+                    try {
+                        await testLt(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('lt')
+                    }
+                    break;
+                case 'ne':
+                    try {
+                        await testNe(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('ne')
+                    }
+                    break;
+                case 'pr':
+                    try {
+                        await testPr(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('pr')
+                    }
+                    break;
+                case 'sw':
+                    try {
+                        await testSw(httpClient, controlRes, property, path, propertiesToTest)
+                    } catch (error) {
+                        propertiesToTest[property].unsupported.push('sw')
                     }
                     break;
             }
@@ -243,10 +430,10 @@ async function testFilters(httpClient, path, propertiesToTest) {
     return propertiesToTest
 }
 
-async function validateFilters(httpClient, method, path, spec) {
+async function validateFilters(httpClient, method, version, path, spec) {
     let uniqueErrors = {
         method: method,
-        endpoint: path,
+        endpoint: version + path,
         errors: {
             undocumentedFilters: [],
             unsupportedFilters: []
@@ -268,7 +455,7 @@ async function validateFilters(httpClient, method, path, spec) {
                             // A supported filter is not documented
                             if (!(documentedFilters[property].includes(supportedFilter))) {
                                 uniqueErrors.errors['undocumentedFilters'].push({
-                                    'message': `The property ${property} supports "${supportedFilter}" but it is not documented.`,
+                                    'message': `The property \`${property}\` supports the \`${supportedFilter}\` filter parameter but it is not documented.`,
                                     'data': null
                                 })
                             }
@@ -277,7 +464,7 @@ async function validateFilters(httpClient, method, path, spec) {
                             // A documented filter is not supported
                             if (!(testedProperties[property]["supported"].includes(documentedFilter))) {
                                 uniqueErrors.errors['unsupportedFilters'].push({
-                                    'message': `The property ${property} does not support "${documentedFilter}" but the documentation says it does.`,
+                                    'message': `The property \`${property}\` does not support the \`${documentedFilter}\` filter parameter but the documentation says it does.`,
                                     'data': null
                                 })
                             }
@@ -350,13 +537,19 @@ async function validateSchema(httpClient, ajv, path, spec) {
     }
 }
 
-async function validatePath(httpClient, ajv, path, spec) {
+async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters) {
     if ("get" in spec.paths[path] && !path.includes('{')) {
         const contentType = spec.paths[path].get.responses['200'].content;
         if ("application/json" in contentType) {
-            //const schemaErrors = await validateSchema(httpClient, ajv, path, spec);
-            const filterErrors = validateFilters(httpClient, "get", path, spec);
-            return null;
+            let schemaErrors = undefined
+            let filterErrors = undefined
+            if (!skipSchema) {
+                schemaErrors = await validateSchema(httpClient, ajv, path, spec);
+            }
+            if (!skipFilters) {
+                filterErrors = await validateFilters(httpClient, "get", spec.servers[0].url.split('.com')[1], path, spec);
+            }
+            return { schemaErrors, filterErrors };
         } else {
             console.log(`Path ${path} uses ${JSON.stringify(contentType)} instead of application/json.  Skipping.`);
         }
@@ -412,13 +605,13 @@ async function main() {
     const validations = [];
     if (argv.path) { // Test single path
         if (argv.path in spec.paths) {
-            validations.push(validatePath(instance, ajv, argv.path, spec));
+            validations.push(validatePath(instance, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters));
         } else {
             console.error(`Path ${argv.path} does not exist in the spec.  Aborting...`);
         }
     } else { // Test all paths
         for (const path in spec.paths) {
-            validations.push(validatePath(instance, ajv, path, spec));
+            validations.push(validatePath(instance, ajv, path, argv.skipSchema, argv.skipFilters));
         }
     }
 
@@ -429,11 +622,23 @@ async function main() {
     // Build the comment that will be added to the GitHub PR if there are any errors.
     if ("github-action" in argv) {
         results.forEach(result => {
-            if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
-                output += `|${result.method} ${result.endpoint}|`;
-                for (error in result.errors) {
-                    const data = formatData(result.errors[error].data);
-                    output += `<details closed><summary>${result.errors[error].message}</summary><pre>${data}</pre></details>`;
+            if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
+                output += `|${result.schemaErrors.method} ${result.schemaErrors.endpoint}|`;
+                for (error in result.schemaErrors.errors) {
+                    const data = formatData(result.schemaErrors.errors[error].data);
+                    output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
+                    totalErrors += 1;
+                }
+                output += "|\n";
+            }
+            if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
+                output += `|${result.filterErrors.method} ${result.filterErrors.endpoint}|`;
+                for (undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
+                    output += `<p>${undocumentedFilter.message}</p>`
+                    totalErrors += 1;
+                }
+                for (unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
+                    output += `<p>${unsupportedFilter.message}</p>`
                     totalErrors += 1;
                 }
                 output += "|\n";
@@ -441,10 +646,22 @@ async function main() {
         });
     } else {
         results.forEach(result => {
-            if (result && Object.keys(result.errors).length > 0) { // API errors return an undefined result
-                output += `Errors found in ${result.method} ${result.endpoint}\n\n`;
-                for (error in result.errors) {
-                    output += `- ${result.errors[error].message}\n`;
+            if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
+                output += `Errors found in ${result.schemaErrors.method} ${result.schemaErrors.endpoint}\n\n`;
+                for (error in result.schemaErrors.errors) {
+                    output += `- ${result.schemaErrors.errors[error].message}\n`;
+                    totalErrors += 1;
+                }
+                output += "\n";
+            }
+            if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
+                output += `Errors found in ${result.filterErrors.method} ${result.filterErrors.endpoint}\n\n`;
+                for (undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
+                    output += `- ${undocumentedFilter.message.replaceAll('`','"')}\n`;
+                    totalErrors += 1;
+                }
+                for (unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
+                    output += `- ${unsupportedFilter.message.replaceAll('`','"')}\n`;
                     totalErrors += 1;
                 }
                 output += "\n";
