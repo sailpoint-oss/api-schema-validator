@@ -143,7 +143,7 @@ function parseFilters(description) {
 }
 
 function handleResError(error) {
-    if (error) {
+    if (error.response) {
         const method = error.response.request.method;
         const endpoint = error.response.request.path;
         console.log(`${method} ${endpoint}`);
@@ -160,14 +160,15 @@ function handleResError(error) {
             // Something happened in setting up the request that triggered an Error
             console.log('Error', error.message);
         }
+    } else if (error) {
+        console.log(error)
     } else {
         console.log(`A serious error occurred for ${path}`);
     }
 }
 
 // Contains
-async function testCo(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
+async function testCo(httpClient, example, property, path, propertiesToTest) {
     if (typeof example === "string") {
         const partial = example.substring(example.length / 3, example.length / 2)
         const res = await httpClient.get(path, { params: { filters: `${property} co "${partial}"`}})
@@ -183,9 +184,7 @@ async function testCo(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Equals
-async function testEq(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testEq(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} eq "${example}"`}})
@@ -202,9 +201,7 @@ async function testEq(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Greater than or equal
-async function testGe(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testGe(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} ge "${example}"`}})
@@ -221,9 +218,7 @@ async function testGe(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Greater than
-async function testGt(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testGt(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} gt "${example}"`}})
@@ -240,9 +235,7 @@ async function testGt(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Item in array
-async function testIn(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testIn(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} in ("${example}")`}})
@@ -259,9 +252,7 @@ async function testIn(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Less than or equal to
-async function testLe(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testLe(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} le "${example}"`}})
@@ -278,9 +269,7 @@ async function testLe(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Less than
-async function testLt(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testLt(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} lt "${example}"`}})
@@ -297,9 +286,7 @@ async function testLt(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Not equals
-async function testNe(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testNe(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     if (typeof example === "string") {
         res = await httpClient.get(path, { params: { filters: `${property} ne "${example}"`}})
@@ -316,9 +303,7 @@ async function testNe(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Is present
-async function testPr(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
-
+async function testPr(httpClient, example, property, path, propertiesToTest) {
     let res = undefined
     res = await httpClient.get(path, { params: { filters: `pr ${property}`}})
 
@@ -331,8 +316,7 @@ async function testPr(httpClient, controlRes, property, path, propertiesToTest) 
 }
 
 // Starts with
-async function testSw(httpClient, controlRes, property, path, propertiesToTest) {
-    const example = controlRes.data.filter(item => property in item)[0][property]
+async function testSw(httpClient, example, property, path, propertiesToTest) {
     if (typeof example === "string") {
         const partial = example.substring(0, example.length / 2)
         const res = await httpClient.get(path, { params: { filters: `${property} sw "${partial}"`}})
@@ -347,86 +331,98 @@ async function testSw(httpClient, controlRes, property, path, propertiesToTest) 
     } 
 }
 
-async function testFilters(httpClient, path, propertiesToTest) {
+async function testFilters(httpClient, path, propertiesToTest, documentedFilters) {
     // Invoke the path without any filters so we have test data to work with when crafting the queries
     const controlRes = await httpClient.get(path).catch(error => {handleResError(error)});
 
-    for (const [property, value] of Object.entries(propertiesToTest)) {
-        for (const operation of value.operators) {
-            switch(operation) {
-                case 'co':
-                    try {
-                        await testCo(httpClient, controlRes, property, path, propertiesToTest);
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('co')
-                    }
-                    break;
-                case 'eq':
-                    try {
-                        await testEq(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('eq')
-                    }
-                    break;
-                case 'ge':
-                    try {
-                        await testGe(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('ge')
-                    }
-                    break;
-                case 'gt':
-                    try {
-                        await testGt(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('gt')
-                    }
-                    break;
-                case 'in':
-                    try {
-                        await testIn(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('in')
-                    }
-                    break;
-                case 'le':
-                    try {
-                        await testLe(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('le')
-                    }
-                    break;
-                case 'lt':
-                    try {
-                        await testLt(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('lt')
-                    }
-                    break;
-                case 'ne':
-                    try {
-                        await testNe(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('ne')
-                    }
-                    break;
-                case 'pr':
-                    try {
-                        await testPr(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('pr')
-                    }
-                    break;
-                case 'sw':
-                    try {
-                        await testSw(httpClient, controlRes, property, path, propertiesToTest)
-                    } catch (error) {
-                        propertiesToTest[property].unsupported.push('sw')
-                    }
-                    break;
+    if (controlRes.data.length > 0) {
+        for (const [property, value] of Object.entries(propertiesToTest)) {
+            const example = controlRes.data.filter(item => property in item && item[property] != null)[0][property]
+            for (const operation of value.operators) {
+                switch(operation) {
+                    case 'co':
+                        try {
+                            await testCo(httpClient, example, property, path, propertiesToTest);
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('co')
+                        }
+                        break;
+                    case 'eq':
+                        try {
+                            await testEq(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('eq')
+                        }
+                        break;
+                    case 'ge':
+                        try {
+                            await testGe(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('ge')
+                        }
+                        break;
+                    case 'gt':
+                        try {
+                            await testGt(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('gt')
+                        }
+                        break;
+                    case 'in':
+                        try {
+                            await testIn(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('in')
+                        }
+                        break;
+                    case 'le':
+                        try {
+                            await testLe(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('le')
+                        }
+                        break;
+                    case 'lt':
+                        try {
+                            await testLt(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('lt')
+                        }
+                        break;
+                    case 'ne':
+                        try {
+                            await testNe(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('ne')
+                        }
+                        break;
+                    case 'pr':
+                        try {
+                            await testPr(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('pr')
+                        }
+                        break;
+                    case 'sw':
+                        try {
+                            await testSw(httpClient, example, property, path, propertiesToTest)
+                        } catch (error) {
+                            propertiesToTest[property].unsupported.push('sw')
+                        }
+                        break;
+                }
+            }
+        } 
+    } else {
+        console.debug(`No data for ${path}`)
+        // No data found.  Add all documented filters as "supported" until we have data to test otherwise.
+        for (property in documentedFilters) {
+            for (filter of documentedFilters[property]) {
+                propertiesToTest[property].supported.push(filter)
             }
         }
-    } 
+    }
+    
 
     return propertiesToTest
 }
@@ -449,7 +445,7 @@ async function validateFilters(httpClient, method, version, path, spec) {
             try {
                 documentedFilters = parseFilters(filteredParams[0].description);
                 const propertiesToTest = getFilterableProperties(schema)
-                const testedProperties = await testFilters(httpClient, path, propertiesToTest)
+                const testedProperties = await testFilters(httpClient, path, propertiesToTest, documentedFilters)
                 for (property in testedProperties) {
                     if (property in documentedFilters) {
                         for (supportedFilter of testedProperties[property]["supported"]) {
@@ -585,20 +581,21 @@ async function main() {
     spec = result.spec;
 
     const access_token = await getAccessToken();
-    const instance = axios.create({
+    const httpClient = axios.create({
         baseURL: spec.servers[0].url.replace('{tenant}', 'devrel'),
         timeout: 20000, // Some endpoints can take up to 10 seconds to complete
         headers: { 'Authorization': `Bearer ${access_token}` }
     });
-    axiosRetry(instance, { 
-        retries: 50,
-        retryDelay: (retryCount) => {
-            console.log(`retry attempt: ${retryCount}`);
-            return 10000; // time interval between retries
+    axiosRetry(httpClient, { 
+        retries: 20,
+        retryDelay: (retryCount, error) => {
+            console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
+            return retryCount * 1000; // time interval between retries
         },
         retryCondition: (error) => {
-            return error.response.status === 429;
-        }
+            return error.response.status === 429 || error.response.status === 502;
+        },
+        shouldResetTimeout: true
     });
 
     const ajv = new Ajv({
@@ -616,13 +613,13 @@ async function main() {
     const validations = [];
     if (argv.path) { // Test single path
         if (argv.path in spec.paths) {
-            validations.push(validatePath(instance, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters));
+            validations.push(validatePath(httpClient, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters));
         } else {
             console.error(`Path ${argv.path} does not exist in the spec.  Aborting...`);
         }
     } else { // Test all paths
         for (const path in spec.paths) {
-            validations.push(validatePath(instance, ajv, path, spec, argv.skipSchema, argv.skipFilters));
+            validations.push(validatePath(httpClient, ajv, path, spec, argv.skipSchema, argv.skipFilters));
         }
     }
 
