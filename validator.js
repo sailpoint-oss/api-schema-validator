@@ -397,6 +397,8 @@ async function testFilters(httpClient, path, propertiesToTest, documentedFilters
                         }
                         break;
                     case 'pr':
+                        // Testing "isnull" requires that we don't filter out null examples
+                        example = controlRes.data.filter(item => property in item)[0][property]
                         try {
                             await testPr(httpClient, example, property, path, propertiesToTest)
                         } catch (error) {
