@@ -1,6 +1,5 @@
 // Find all top level attributes within the response schema that are not arrays or objects
 // Assign the correct subset of operators that are applicable to each type of property.
-// TODO: Support arrays and objects
 function getFilterableProperties(schema) {
     let filterableProperties = {}
     let properties = null
@@ -251,7 +250,6 @@ async function testFilters(httpClient, path, propertiesToTest, documentedFilters
 
     if (controlRes.data.length > 0) {
         for (const [property, value] of Object.entries(propertiesToTest)) {
-            // TODO: handle child properties
             let example = null
             let propIsUndefined = false
             try {

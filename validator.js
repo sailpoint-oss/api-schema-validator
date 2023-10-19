@@ -9,6 +9,7 @@ const dotenv = require("dotenv");
 const yargs = require('yargs');
 const YAML = require('yamljs');
 const filterTests = require('./filterTests')
+const sorterTests = require('./sorterTests')
 
 
 function getArgs() {
@@ -47,6 +48,11 @@ function getArgs() {
         })
         .option('skip-filters', {
             description: "Don't run the filter query param validator",
+            type: 'boolean',
+            default: false
+        })
+        .option('skip-sorters', {
+            description: "Don't run the sorter query param validator",
             type: 'boolean',
             default: false
         })
@@ -170,7 +176,7 @@ async function validateSchema(httpClient, ajv, path, spec) {
     }
 }
 
-async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters) {
+async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters, skipSorters) {
     if ("get" in spec.paths[path] && !path.includes('{')) {
         const contentType = spec.paths[path].get.responses['200'].content;
         if ("application/json" in contentType) {
@@ -182,7 +188,10 @@ async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters
             if (!skipFilters) {
                 filterErrors = await filterTests.validateFilters(httpClient, "get", spec.servers[0].url.split('.com')[1], path, spec);
             }
-            return { schemaErrors, filterErrors };
+            if (!skipSorters) {
+                sorterErrors = await sorterTests.validateSorters(httpClient, "get", spec.servers[0].url.split('.com')[1], path, spec);
+            }
+            return { schemaErrors, filterErrors, sorterErrors };
         } else {
             console.log(`Path ${path} uses ${JSON.stringify(contentType)} instead of application/json.  Skipping.`);
         }
@@ -249,13 +258,13 @@ async function main() {
     const validations = [];
     if (argv.path) { // Test single path
         if (argv.path in spec.paths) {
-            validations.push(validatePath(httpClient, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters));
+            validations.push(validatePath(httpClient, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters, argv.skipSorters));
         } else {
             console.error(`Path ${argv.path} does not exist in the spec.  Aborting...`);
         }
     } else { // Test all paths
         for (const path in spec.paths) {
-            validations.push(validatePath(httpClient, ajv, path, spec, argv.skipSchema, argv.skipFilters));
+            validations.push(validatePath(httpClient, ajv, path, spec, argv.skipSchema, argv.skipFilters, argv.skipSorters));
         }
     }
 
@@ -287,6 +296,18 @@ async function main() {
                 }
                 output += "|\n";
             }
+            if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
+                output += `|${result.sorterErrors.method} ${result.sorterErrors.endpoint}|`;
+                for (undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
+                    output += `<p>${undocumentedSorter.message}</p>`
+                    totalErrors += 1;
+                }
+                for (unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
+                    output += `<p>${unsupportedSorter.message}</p>`
+                    totalErrors += 1;
+                }
+                output += "|\n";
+            }
         });
     } else {
         results.forEach(result => {
@@ -306,6 +327,18 @@ async function main() {
                 }
                 for (unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
                     output += `- ${unsupportedFilter.message.replaceAll('`', '"')}\n`;
+                    totalErrors += 1;
+                }
+                output += "\n";
+            }
+            if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
+                output += `Errors found in ${result.sorterErrors.method} ${result.sorterErrors.endpoint}\n\n`;
+                for (undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
+                    output += `- ${undocumentedSorter.message.replaceAll('`', '"')}\n`;
+                    totalErrors += 1;
+                }
+                for (unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
+                    output += `- ${unsupportedSorter.message.replaceAll('`', '"')}\n`;
                     totalErrors += 1;
                 }
                 output += "\n";
