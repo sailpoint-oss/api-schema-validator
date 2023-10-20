@@ -182,6 +182,7 @@ async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters
         if ("application/json" in contentType) {
             let schemaErrors = undefined
             let filterErrors = undefined
+            let sorterErrors = undefined
             if (!skipSchema) {
                 schemaErrors = await validateSchema(httpClient, ajv, path, spec);
             }
