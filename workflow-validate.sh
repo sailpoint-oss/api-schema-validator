@@ -19,7 +19,7 @@ validate_paths () {
         if echo $FILE_PATH | grep paths --quiet
         then
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            if ! cat tested_paths.txt | grep -x "$API_PATH"
+            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
             then
                 ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
                 echo $ERRORS
