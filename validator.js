@@ -233,10 +233,10 @@ async function main() {
         headers: { 'Authorization': `Bearer ${access_token}` }
     });
     axiosRetry(httpClient, {
-        retries: 20,
+        retries: 1000,
         retryDelay: (retryCount, error) => {
             //console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
-            return retryCount * 1000; // time interval between retries
+            return retryCount * 2000; // time interval between retries
         },
         retryCondition: (error) => {
             return error.response.status === 429 || error.response.status === 502;

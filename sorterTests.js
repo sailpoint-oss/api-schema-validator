@@ -1,6 +1,4 @@
 // Find all top level attributes within the response schema that are not arrays or objects
-// Assign the correct subset of operators that are applicable to each type of property.
-// TODO: Support arrays and objects
 function getSortableProperties(schema) {
     let sortableProperties = {}
     let properties = null
