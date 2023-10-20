@@ -251,14 +251,9 @@ async function testFilters(httpClient, path, propertiesToTest, documentedFilters
     if (controlRes.data.length > 0) {
         for (const [property, value] of Object.entries(propertiesToTest)) {
             let example = null
-            let propIsUndefined = false
-            try {
-                example = getPropByString(controlRes.data.filter(item => getPropByString(item, property) != null)[0], property)
-            } catch (error) {
-                console.log(`Can't test filter for property ${property} in path ${path}. It does not have any non-null examples: ${error}`)
-            }
-
-            if (!propIsUndefined) {
+            const nonNullExamples = controlRes.data.filter(item => getPropByString(item, property) != null)
+            if (nonNullExamples.length > 0) {
+                example = getPropByString(nonNullExamples[0], property)
                 for (const operation of value.operators) {
                     switch (operation) {
                         case 'co':
@@ -334,12 +329,7 @@ async function testFilters(httpClient, path, propertiesToTest, documentedFilters
                     }
                 }
             } else {
-                // Property is undefined in response.  Add all documented filters as "supported" until we have data to test otherwise.
-                for (property in documentedFilters) {
-                    for (filter of documentedFilters[property]) {
-                        propertiesToTest[property].supported.push(filter)
-                    }
-                }
+                console.log(`Can't test filter for property ${property} in path ${path}. It does not have any non-null examples.`)
             }
         }
     } else {
