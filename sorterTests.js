@@ -64,7 +64,6 @@ function getPropByString(obj, propString) {
 
 async function testSorters(httpClient, path, propertiesToTest, documentedSorters) {
     for (const [property, value] of Object.entries(propertiesToTest)) {
-
         try {
             const ascRes = await httpClient.get(path, { params: { sorters: property } })
             // There must be at least two items in the response data to test sorters.

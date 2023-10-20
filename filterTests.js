@@ -17,21 +17,21 @@ function getFilterableProperties(schema) {
         if (propertySchema.type === 'string') {
             filterableProperties[property] = {
                 type: propertySchema.type,
-                operators: ['co', 'eq', 'ge', 'gt', 'in', 'le', 'lt', 'ne', 'pr', 'sw'],
+                operators: ['co', 'eq', 'ge', 'gt', 'in', 'le', 'lt', 'ne', 'pr', 'isnull', 'sw'],
                 supported: [],
                 unsupported: []
             }
         } else if (propertySchema.type === 'boolean') {
             filterableProperties[property] = {
                 type: propertySchema.type,
-                operators: ['eq', 'ne', 'pr'],
+                operators: ['eq', 'ne', 'pr', 'isnull'],
                 supported: [],
                 unsupported: []
             }
         } else if (propertySchema.type === 'number') {
             filterableProperties[property] = {
                 type: propertySchema.type,
-                operators: ['eq', 'ne', 'pr', 'gt', 'ge', 'lt', 'le'],
+                operators: ['eq', 'ne', 'pr', 'isnull', 'gt', 'ge', 'lt', 'le'],
                 supported: [],
                 unsupported: []
             }
