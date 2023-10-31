@@ -227,7 +227,7 @@ async function testSw(httpClient, example, property, path, propertyToTest) {
     if (typeof example === "string") {
         const partial = example.substring(0, example.length / 2)
         const res = await httpClient.get(path, { params: { filters: `${property} sw "${partial}"` } })
-        const badMatches = res.data.filter(item => getPropByString(item, property).substring(0, example.length / 2) !== partial)
+        const badMatches = res.data.filter(item => getPropByString(item, property).substring(0, example.length / 2).toLowerCase() !== partial.toLowerCase())
         if (badMatches.length > 0) {
             propertyToTest.unsupported.push('sw')
         } else {
