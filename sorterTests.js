@@ -75,7 +75,7 @@ async function testSorters(httpClient, path, propertiesToTest, documentedSorters
                 const descItem = getPropByString(descRes.data[0], property)
     
                 if (ascItem === descItem) {
-                    propertiesToTest[property].supported = false
+                    propertiesToTest[property].supported = true
                 } else if (ascItem == null && descItem != null) {
                     // Null is less than any other value, so this means that sorting appears to be supported.
                     propertiesToTest[property].supported = true
