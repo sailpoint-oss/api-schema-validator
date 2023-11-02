@@ -131,14 +131,14 @@ async function validateSorters(httpClient, method, version, path, spec) {
                         if (documentedSorters.includes(property)) {
                             if (!testedProperties[property].supported) {
                                 uniqueErrors.errors['unsupportedSorters'].push({
-                                    'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does.`,
+                                    'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does. Please manually verify.`,
                                     'data': null
                                 })
                             }
                         } else {
                             if (testedProperties[property].supported) {
                                 uniqueErrors.errors['undocumentedSorters'].push({
-                                    'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented.`,
+                                    'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented. Please manually verify.`,
                                     'data': null
                                 })
                             }
