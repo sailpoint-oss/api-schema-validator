@@ -63,13 +63,13 @@ do
         echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
         echo "| Path | Errors |"
         echo "|-|-|"
-        echo $VALIDATION
+        echo "$VALIDATION"
         echo "---"
     fi
 done
 
 cd ../
 
-# rm -rf cloud-api-client-common
-# rm v3.yaml
-# rm beta.yaml
+rm -rf cloud-api-client-common
+rm v3.yaml
+rm beta.yaml

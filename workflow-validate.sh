@@ -46,6 +46,7 @@ BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$@
 touch tested_paths.txt
 
+echo "Changed files: $CHANGED_FILES"
 for CHANGED_FILE in $CHANGED_FILES
 do
     VALIDATION=$(validate_paths $CHANGED_FILE)

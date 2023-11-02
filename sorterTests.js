@@ -75,7 +75,7 @@ async function testSorters(httpClient, path, propertiesToTest, documentedSorters
                 const descItem = getPropByString(descRes.data[0], property)
     
                 if (ascItem === descItem) {
-                    propertiesToTest[property].supported = true
+                    propertiesToTest[property].supported = false
                 } else if (ascItem == null && descItem != null) {
                     // Null is less than any other value, so this means that sorting appears to be supported.
                     propertiesToTest[property].supported = true
@@ -131,14 +131,14 @@ async function validateSorters(httpClient, method, version, path, spec) {
                         if (documentedSorters.includes(property)) {
                             if (!testedProperties[property].supported) {
                                 uniqueErrors.errors['unsupportedSorters'].push({
-                                    'message': `The property \`${property}\` does not support sorting but the documentation says it does.`,
+                                    'message': `The property \`${property}\` **MIGHT** not support sorting but the documentation says it does.`,
                                     'data': null
                                 })
                             }
                         } else {
                             if (testedProperties[property].supported) {
                                 uniqueErrors.errors['undocumentedSorters'].push({
-                                    'message': `The property \`${property}\` supports sorting but it is not documented.`,
+                                    'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented.`,
                                     'data': null
                                 })
                             }

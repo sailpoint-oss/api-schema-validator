@@ -283,7 +283,7 @@ async function main() {
                     output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
                     totalErrors += 1;
                 }
-                output += "|\n";
+                output += "|\\n";
             }
             if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
                 output += `|${result.filterErrors.method} ${result.filterErrors.endpoint}|`;
@@ -295,7 +295,7 @@ async function main() {
                     output += `<p>${unsupportedFilter.message}</p>`
                     totalErrors += 1;
                 }
-                output += "|\n";
+                output += "|\\n";
             }
             if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
                 output += `|${result.sorterErrors.method} ${result.sorterErrors.endpoint}|`;
@@ -307,7 +307,7 @@ async function main() {
                     output += `<p>${unsupportedSorter.message}</p>`
                     totalErrors += 1;
                 }
-                output += "|\n";
+                output += "|\\n";
             }
         });
     } else {
