@@ -59,7 +59,7 @@ for CHANGED_FILE in $CHANGED_FILES
 do
     echo "Validate $CHANGED_FILE"
     VALIDATION=$(validate_paths $CHANGED_FILE)
-    if echo $VALIDATION | grep "\|" --quiet
+    if echo $VALIDATION | grep "|" --quiet
     then
         echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
         echo "| Path | Errors |"
