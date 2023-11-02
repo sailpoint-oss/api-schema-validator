@@ -24,7 +24,6 @@ validate_paths () {
                 ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
                 echo $ERRORS
                 echo $API_PATH >> tested_paths.txt
-                echo "Here|We|are"
             fi
         elif echo $FILE_PATH | grep schemas --quiet
         then
