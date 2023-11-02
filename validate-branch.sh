@@ -35,11 +35,11 @@ file_path_length () {
     echo $1 | tr "/" " " | wc -w
 }
 
-rm -rf cloud-api-client-common
-rm v3.yaml
-rm beta.yaml
+# rm -rf cloud-api-client-common
+# rm v3.yaml
+# rm beta.yaml
 
-git clone git@github.com:sailpoint/cloud-api-client-common.git
+# git clone git@github.com:sailpoint/cloud-api-client-common.git
 
 # Switch to a different branch and build the API spec
 cd cloud-api-client-common
@@ -47,18 +47,19 @@ git switch $BRANCH
 cd ../
 
 # Build the API spec
-speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
-speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
+# speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
+# speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
 
 cd cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
 CHANGED_FILES=$(git diff --name-only HEAD master)
 touch tested_paths.txt
-
+echo "Changed files: $CHANGED_FILES"
 for CHANGED_FILE in $CHANGED_FILES
 do
+    echo "Validate $CHANGED_FILE"
     VALIDATION=$(validate_paths $CHANGED_FILE)
-    if echo $VALIDATION | grep "Expected that" --quiet
+    if echo $VALIDATION | grep "\|" --quiet
     then
         echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
         echo "| Path | Errors |"
@@ -70,6 +71,6 @@ done
 
 cd ../
 
-rm -rf cloud-api-client-common
-rm v3.yaml
-rm beta.yaml
+# rm -rf cloud-api-client-common
+# rm v3.yaml
+# rm beta.yaml
