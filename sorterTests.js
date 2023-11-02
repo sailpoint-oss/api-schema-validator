@@ -131,7 +131,7 @@ async function validateSorters(httpClient, method, version, path, spec) {
                         if (documentedSorters.includes(property)) {
                             if (!testedProperties[property].supported) {
                                 uniqueErrors.errors['unsupportedSorters'].push({
-                                    'message': `The property \`${property}\` **MIGHT** not support sorting but the documentation says it does.`,
+                                    'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does.`,
                                     'data': null
                                 })
                             }
