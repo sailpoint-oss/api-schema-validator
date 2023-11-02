@@ -348,7 +348,7 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
                 }
             }
         } else {
-            console.log(`Can't test filter for property ${property} in path ${path}. It does not have any non-null examples.`)
+            //console.log(`Can't test filter for property ${property} in path ${path}. It does not have any non-null examples.`)
             // Add all documented filters for the current property as "supported" until we have data to test otherwise.
             if (property in documentedFilters) {
                 for (filter of documentedFilters[property]) {
