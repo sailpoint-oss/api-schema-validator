@@ -20,6 +20,7 @@
     "ajv": "8.10.0",
     "ajv-formats": "2.1.1",
     "axios": "0.26.1",
+    "axios-retry": "^3.8.0",
     "dotenv": "^16.0.1",
     "nvm": "^0.0.4",
     "swagger-client": "3.18.4",

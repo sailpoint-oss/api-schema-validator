@@ -11,7 +11,8 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "args": ["-i", "v3.yaml", "-p", "/accounts", "--github-action"],
+            "args": ["-i", "v3.yaml", "-p", "/sources", "--skip-sorters", "--skip-schema"],
+            //"args": ["-i", "beta.yaml"],
             "program": "${workspaceFolder}/validator.js"
         }
     ]
