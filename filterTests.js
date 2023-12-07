@@ -12,12 +12,13 @@ function getFilterableProperties(schema) {
             return filterableProperties
         }
     }
-    // If schema is an array, loop through the array items
+    // If schema is an array, loop through the array items.
+    // "co" is not checked because it requires special approval from engineering to document it.
     for (const [property, propertySchema] of properties) {
         if (propertySchema.type === 'string') {
             filterableProperties[property] = {
                 type: propertySchema.type,
-                operators: ['co', 'eq', 'ge', 'gt', 'in', 'le', 'lt', 'ne', 'pr', 'isnull', 'sw'],
+                operators: ['eq', 'ge', 'gt', 'in', 'le', 'lt', 'ne', 'pr', 'isnull', 'sw'],
                 supported: [],
                 unsupported: []
             }
@@ -58,23 +59,6 @@ function parseFilters(description) {
         filters[attribute] = operators;
     })
     return filters;
-}
-
-// Contains
-async function testCo(httpClient, example, property, path, propertyToTest) {
-    if (typeof example === "string") {
-        // Contains is case insensitive, so lowercase everything
-        const partial = example.substring(example.length / 3, example.length / 2).toLowerCase()
-        const res = await httpClient.get(path, { params: { filters: `${property} co "${partial}"` } })
-        const badMatches = res.data.filter(item => !getPropByString(item, property).toLowerCase().includes(partial))
-        if (badMatches.length > 0) {
-            propertyToTest.unsupported.push('co')
-        } else {
-            propertyToTest.supported.push('co')
-        }
-    } else {
-        propertyToTest.unsupported.push('co')
-    }
 }
 
 // Equals
@@ -266,15 +250,9 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
         const nonNullExamples = controlRes.data.filter(item => getPropByString(item, property) != null)
         if (nonNullExamples.length > 0) {
             example = getPropByString(nonNullExamples[0], property)
+            // Don't test 'co' because it requires special approval from engineering to document it.
             for (const operation of propertyToTest.operators) {
                 switch (operation) {
-                    case 'co':
-                        try {
-                            await testCo(httpClient, example, property, path, propertyToTest);
-                        } catch (error) {
-                            propertyToTest.unsupported.push('co')
-                        }
-                        break;
                     case 'eq':
                         try {
                             await testEq(httpClient, example, property, path, propertyToTest)
