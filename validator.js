@@ -11,7 +11,6 @@ const YAML = require('yamljs');
 const filterTests = require('./filterTests')
 const sorterTests = require('./sorterTests')
 
-
 function getArgs() {
     const argv = yargs
         .option('input', {
@@ -125,6 +124,25 @@ function handleResError(error) {
     }
 }
 
+function findAdditionalProperties(path, data, schema) {
+    additionalProps = []
+    for (const prop in data) {
+        if (!(prop in schema)) {
+            if (path === "") {
+                additionalProps.push(prop)
+            } else {
+                additionalProps.push(path + "." + prop)
+            }
+        } else if (Array.isArray(data[prop]) && typeof (data[prop]) === "object") {
+            additionalProps.push(findAdditionalProperties(prop, data[prop], schema[prop].items.properties))
+        } else if (data[prop] != null && typeof (data[prop]) === "object") {
+            additionalProps.push(findAdditionalProperties(prop, data[prop], schema[prop].properties))
+        }
+    }
+
+    return additionalProps
+}
+
 async function validateSchema(httpClient, ajv, path, spec) {
     const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
     res = await httpClient.get(path).catch(error => { handleResError(error) });
@@ -153,13 +171,18 @@ async function validateSchema(httpClient, ajv, path, spec) {
             return uniqueErrors;
         }
 
-        const isValid = validate(res.data);
+        const passesAJV = validate(res.data);
 
-        if (!isValid) {
+        // Check for additional properties not defined in the schema
+        const additionalProperties = "items" in schema ? findAdditionalProperties("", res.data[0], schema.items.properties) : findAdditionalProperties("", res.data[0], schema.properties)
+        const hasAdditionalProperties = Object.keys(additionalProperties).length === 0 ? false : true
+
+        // If AJV finds issues, report each issue
+        if (!passesAJV) {
             // Since there can be up to 250 items in the response data, we don't want to have 
             // the same error message appear multiple times.
             // This will allow us to have one error for each unique schema violation.
-            validate.errors.forEach(error => {
+            for (error of validate.errors) {
                 if (!(error.schemaPath in uniqueErrors.errors)) {
                     message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
                     uniqueErrors.errors[error.schemaPath] = {
@@ -167,8 +190,20 @@ async function validateSchema(httpClient, ajv, path, spec) {
                         data: res.data[error.instancePath.split('/')[1]]
                     }
                 }
-            });
+            }
         }
+
+        // If there are additional properties, report each property
+        if (hasAdditionalProperties) {
+            for (additionalProp of additionalProperties) {
+                message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification. Please document this property in the API specification.`
+                uniqueErrors.errors[additionalProp] = {
+                    message,
+                    data: res.data[0]
+                }
+            }
+        }
+
 
         return uniqueErrors;
     } else {
