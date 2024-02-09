@@ -125,18 +125,23 @@ function handleResError(error) {
 }
 
 function findAdditionalProperties(path, data, schema) {
-    additionalProps = []
+    let additionalProps = []
     for (const prop in data) {
-        if (!(prop in schema)) {
-            if (path === "") {
-                additionalProps.push(prop)
-            } else {
-                additionalProps.push(path + "." + prop)
+        if (schema != undefined) {
+            const fullPath = path === "" ? prop : path + "." + prop
+            if (!(prop in schema)) {
+                additionalProps.push(fullPath)
+            } else if (Array.isArray(data[prop]) && typeof (data[prop][0]) === "object" && schema[prop].type === "array" && schema[prop].items.type === "object") {
+                const result = findAdditionalProperties(fullPath, data[prop][0], schema[prop].items.properties)
+                if (result.length > 0) {
+                    additionalProps = additionalProps.concat(result)
+                }
+            } else if (data[prop] != null && !Array.isArray(data[prop]) && typeof (data[prop]) === "object") {
+                const result = findAdditionalProperties(fullPath, data[prop], schema[prop].properties)
+                if (result.length > 0) {
+                    additionalProps = additionalProps.concat(result)
+                }
             }
-        } else if (Array.isArray(data[prop]) && typeof (data[prop]) === "object") {
-            additionalProps.push(findAdditionalProperties(prop, data[prop], schema[prop].items.properties))
-        } else if (data[prop] != null && typeof (data[prop]) === "object") {
-            additionalProps.push(findAdditionalProperties(prop, data[prop], schema[prop].properties))
         }
     }
 
@@ -182,7 +187,7 @@ async function validateSchema(httpClient, ajv, path, spec) {
             // Since there can be up to 250 items in the response data, we don't want to have 
             // the same error message appear multiple times.
             // This will allow us to have one error for each unique schema violation.
-            for (error of validate.errors) {
+            for (const error of validate.errors) {
                 if (!(error.schemaPath in uniqueErrors.errors)) {
                     message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
                     uniqueErrors.errors[error.schemaPath] = {
@@ -195,8 +200,8 @@ async function validateSchema(httpClient, ajv, path, spec) {
 
         // If there are additional properties, report each property
         if (hasAdditionalProperties) {
-            for (additionalProp of additionalProperties) {
-                message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification. Please document this property in the API specification.`
+            for (const additionalProp of additionalProperties) {
+                message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`
                 uniqueErrors.errors[additionalProp] = {
                     message,
                     data: res.data[0]
@@ -313,7 +318,7 @@ async function main() {
         results.forEach(result => {
             if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
                 output += `|${result.schemaErrors.method} ${result.schemaErrors.endpoint}|`;
-                for (error in result.schemaErrors.errors) {
+                for (const error in result.schemaErrors.errors) {
                     const data = formatData(result.schemaErrors.errors[error].data);
                     output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
                     totalErrors += 1;
@@ -322,11 +327,11 @@ async function main() {
             }
             if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
                 output += `|${result.filterErrors.method} ${result.filterErrors.endpoint}|`;
-                for (undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
+                for (const undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
                     output += `<p>${undocumentedFilter.message}</p>`
                     totalErrors += 1;
                 }
-                for (unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
+                for (const unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
                     output += `<p>${unsupportedFilter.message}</p>`
                     totalErrors += 1;
                 }
@@ -334,11 +339,11 @@ async function main() {
             }
             if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
                 output += `|${result.sorterErrors.method} ${result.sorterErrors.endpoint}|`;
-                for (undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
+                for (const undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
                     output += `<p>${undocumentedSorter.message}</p>`
                     totalErrors += 1;
                 }
-                for (unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
+                for (const unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
                     output += `<p>${unsupportedSorter.message}</p>`
                     totalErrors += 1;
                 }
@@ -349,7 +354,7 @@ async function main() {
         results.forEach(result => {
             if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
                 output += `Errors found in ${result.schemaErrors.method} ${result.schemaErrors.endpoint}\n\n`;
-                for (error in result.schemaErrors.errors) {
+                for (const error in result.schemaErrors.errors) {
                     output += `- ${result.schemaErrors.errors[error].message}\n`;
                     totalErrors += 1;
                 }
@@ -357,11 +362,11 @@ async function main() {
             }
             if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
                 output += `Errors found in ${result.filterErrors.method} ${result.filterErrors.endpoint}\n\n`;
-                for (undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
+                for (const undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
                     output += `- ${undocumentedFilter.message.replaceAll('`', '"')}\n`;
                     totalErrors += 1;
                 }
-                for (unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
+                for (const unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
                     output += `- ${unsupportedFilter.message.replaceAll('`', '"')}\n`;
                     totalErrors += 1;
                 }
@@ -369,11 +374,11 @@ async function main() {
             }
             if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
                 output += `Errors found in ${result.sorterErrors.method} ${result.sorterErrors.endpoint}\n\n`;
-                for (undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
+                for (const undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
                     output += `- ${undocumentedSorter.message.replaceAll('`', '"')}\n`;
                     totalErrors += 1;
                 }
-                for (unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
+                for (const unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
                     output += `- ${unsupportedSorter.message.replaceAll('`', '"')}\n`;
                     totalErrors += 1;
                 }
