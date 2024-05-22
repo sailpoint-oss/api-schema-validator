@@ -295,6 +295,13 @@ async function main() {
     ajv.addKeyword("example");
     ajv.addKeyword("externalDocs");
     ajv.addFormat("UUID", function (UUID) { return true; });
+    ajv.addFormat("date-time", function (dateTime) { 
+        const noSeconds = /\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z)/ // Match ISO8061 to the minute. This is valid: 2024-03-07T05:00Z
+        const noMilliseconds = /\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z)/ // Match ISO8061 to the second. This is valid: 2024-03-07T05:00:00Z
+        const completePrecision = /\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)/ // Match ISO8061 to the millisecond. This is valid: 2024-03-07T05:00:00.000Z
+        // If any of these formats return a non-null, then the date-time is valid
+        return (dateTime.match(noSeconds) || dateTime.match(noMilliseconds) || dateTime.match(completePrecision))
+    })
 
     const validations = [];
     if (argv.path) { // Test single path
