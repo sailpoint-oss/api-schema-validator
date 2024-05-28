@@ -294,6 +294,7 @@ async function main() {
     addFormats(ajv);
     ajv.addKeyword("example");
     ajv.addKeyword("externalDocs");
+    ajv.addFormat("uuid", function (uuid) { return true; });
     ajv.addFormat("UUID", function (UUID) { return true; });
     ajv.addFormat("date-time", function (dateTime) { 
         const noSeconds = /\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z)/ // Match ISO8061 to the minute. This is valid: 2024-03-07T05:00Z
