@@ -11,7 +11,7 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "args": ["-i", "v3.yaml", "--skip-sorters", "--skip-filters"],
+            "args": ["-i", "v3.yaml", "-p", "/sod-policies", "--skip-schema"],
             //"args": ["-i", "beta.yaml"],
             "program": "${workspaceFolder}/validator.js"
         }
