@@ -55,7 +55,7 @@ function parseFilters(description) {
         const attOpSplit = line.replaceAll("*", "").split(":");
         const attribute = attOpSplit[0].trim();
         const opSplit = attOpSplit[1].trim().split(",");
-        const operators = opSplit.map(op => op.trim());
+        const operators = opSplit.map(op => op.trim()).filter(op => op !== "co"); // Don't include "co" since it's up to engineering to document it
         filters[attribute] = operators;
     })
     return filters;
