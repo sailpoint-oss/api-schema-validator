@@ -120,38 +120,40 @@ async function validateSorters(httpClient, method, version, path, spec) {
     if (spec.paths[path].get.parameters != undefined) {
         const filteredParams = spec.paths[path].get.parameters.filter(param => param.name === "sorters")
         const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
+        let documentedSorters = []
         if (filteredParams.length == 1) {
-            try {
-                documentedSorters = parseSorters(filteredParams[0].description);
-                const propertiesToTest = getSortableProperties(schema)
-                const testedProperties = await testSorters(httpClient, path, propertiesToTest, documentedSorters)
-                for (property in testedProperties) {
-                    // If the property wasn't able to be tested (ex. not enough data), then don't report any errors
-                    if (testedProperties[property].testable) {
-                        if (documentedSorters.includes(property)) {
-                            if (!testedProperties[property].supported) {
-                                uniqueErrors.errors['unsupportedSorters'].push({
-                                    'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does. Please manually verify.`,
-                                    'data': null
-                                })
-                            }
-                        } else {
-                            if (testedProperties[property].supported) {
-                                uniqueErrors.errors['undocumentedSorters'].push({
-                                    'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented. Please manually verify.`,
-                                    'data': null
-                                })
-                            }
+            documentedSorters = parseSorters(filteredParams[0].description);
+        }
+
+        try {
+            const propertiesToTest = getSortableProperties(schema)
+            const testedProperties = await testSorters(httpClient, path, propertiesToTest, documentedSorters)
+            for (property in testedProperties) {
+                // If the property wasn't able to be tested (ex. not enough data), then don't report any errors
+                if (testedProperties[property].testable) {
+                    if (documentedSorters.includes(property)) {
+                        if (!testedProperties[property].supported) {
+                            uniqueErrors.errors['unsupportedSorters'].push({
+                                'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does. Please manually verify.`,
+                                'data': null
+                            })
+                        }
+                    } else {
+                        if (testedProperties[property].supported) {
+                            uniqueErrors.errors['undocumentedSorters'].push({
+                                'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented. Please manually verify.`,
+                                'data': null
+                            })
                         }
                     }
                 }
-            } catch (error) {
-                uniqueErrors.errors['Invalid Sorters'] = {
-                    'message': `Unable to parse the sorters due to improper format: ${error.message}`,
-                    'data': null
-                }
-                return uniqueErrors;
             }
+        } catch (error) {
+            uniqueErrors.errors['Invalid Sorters'] = {
+                'message': `Unable to parse the sorters due to improper format: ${error.message}`,
+                'data': null
+            }
+            return uniqueErrors;
         }
     }
 
