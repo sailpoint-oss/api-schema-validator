@@ -22,7 +22,10 @@ validate_paths () {
             if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
             then
                 ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
-                echo $ERRORS
+                if [ ! -z "$ERRORS" ]
+                then
+                    echo $ERRORS
+                fi
                 echo $API_PATH >> tested_paths.txt
             fi
         elif echo $FILE_PATH | grep schemas --quiet
@@ -48,7 +51,7 @@ touch tested_paths.txt
 
 for CHANGED_FILE in $CHANGED_FILES
 do
-    VALIDATION=$(validate_paths $CHANGED_FILE)
+    VALIDATION=$(validate_paths $CHANGED_FILE | tr -s '\n' '\n')
     if echo $VALIDATION | grep "|" --quiet
     then
         echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below.  For more information on this PR check, please see the [API schema validator README](https://github.com/sailpoint/cloud-api-client-common#api-schema-validator).  For a list of common error messages and how to fix them, please [see this section in the README](https://github.com/sailpoint/cloud-api-client-common#common-api-validator-errors)."

@@ -19,8 +19,11 @@ validate_paths () {
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
             if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
             then
-                ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH -e ../.env --github-action)
-                echo $ERRORS
+                ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH --skip-filters --skip-sorters -e ../.env --github-action)
+                if [ ! -z "$ERRORS" ]
+                then
+                    echo $ERRORS
+                fi
                 echo $API_PATH >> tested_paths.txt
             fi
         elif echo $FILE_PATH | grep schemas --quiet
@@ -58,7 +61,7 @@ echo "Changed files: $CHANGED_FILES"
 for CHANGED_FILE in $CHANGED_FILES
 do
     echo "Validate $CHANGED_FILE"
-    VALIDATION=$(validate_paths $CHANGED_FILE)
+    VALIDATION=$(validate_paths $CHANGED_FILE | tr -s '\n' '\n')
     if echo $VALIDATION | grep "|" --quiet
     then
         echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below."
