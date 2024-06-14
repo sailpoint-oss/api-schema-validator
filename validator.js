@@ -292,6 +292,9 @@ async function main() {
         verbose: true
     });
     addFormats(ajv);
+    ajv.addKeyword("x-go-name");
+    ajv.addKeyword("x-go-package");
+    ajv.addKeyword("x-go-enum-desc");
     ajv.addKeyword("example");
     ajv.addKeyword("externalDocs");
     ajv.addFormat("uuid", function (uuid) { return true; });
@@ -327,8 +330,12 @@ async function main() {
             if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
                 output += `|${result.schemaErrors.method} ${result.schemaErrors.endpoint}|`;
                 for (const error in result.schemaErrors.errors) {
-                    const data = formatData(result.schemaErrors.errors[error].data);
-                    output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
+                    if (result.schemaErrors.errors[error].data != undefined) {
+                        const data = formatData(result.schemaErrors.errors[error].data);
+                        output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
+                    } else {
+                        output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary>`;
+                    }
                     totalErrors += 1;
                 }
                 output += "|\\n";
