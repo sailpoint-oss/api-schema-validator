@@ -115,7 +115,6 @@ async function validateSorters(httpClient, method, version, path, spec) {
             unsupportedSorters: []
         }
     };
-    let documentedSorters = null;
 
     if (spec.paths[path].get.parameters != undefined) {
         const filteredParams = spec.paths[path].get.parameters.filter(param => param.name === "sorters")

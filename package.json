@@ -25,6 +25,7 @@
     "nvm": "^0.0.4",
     "swagger-client": "3.18.4",
     "yamljs": "^0.3.0",
-    "yargs": "^17.5.1"
+    "yargs": "^17.5.1",
+    "loglevel": "^1.9.2"
   }
 }
