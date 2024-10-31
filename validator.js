@@ -420,7 +420,7 @@ async function main() {
                     }
                     output += "|\\n";
                 }
-                if (result && result.userLevelErrors && (Object.keys(result.userLevelErrors.errors.undocumentedUserLevels).length > 0 || Object.keys(result.userLevelErrors.errors.unsupportedUserLevels).length > 0).length > 0) {
+                if (result && result.userLevelErrors && (Object.keys(result.userLevelErrors.errors.undocumentedUserLevels).length > 0 || Object.keys(result.userLevelErrors.errors.unsupportedUserLevels).length > 0)) {
                     output += `|${result.userLevelErrors.method} ${result.userLevelErrors.endpoint}|`;
                     for (const undocumentedUserLevel of result.userLevelErrors.errors.undocumentedUserLevels) {
                         output += `<p>${undocumentedUserLevel.message}</p>`
