@@ -232,7 +232,7 @@ async function getResourceIds(apiClient, path) {
     const collections = path.split(re).slice(0, -1)
 
     for (const collection of collections) {
-        const res = await apiClient.get(collection).catch(error => { handleResError(error) });
+        const res = await apiClient.get(collection).catch(error => { return error });
         if (res.status === 200 && res.data.length > 0) {
             resourceIds[collection] = res.data[0].id
         }

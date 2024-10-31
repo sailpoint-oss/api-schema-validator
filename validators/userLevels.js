@@ -140,14 +140,14 @@ async function validateUserLevels(method, version, path, baseUrl, userLevels, sp
         if (response.response.status >= 200 && response.response.status <= 299) {
             if (!(documentedUserLevels.has(response.userLevel))) {
                 uniqueErrors.errors.undocumentedUserLevels.push({
-                    'message': `This endpoint supports the user level \`${response.userLevel}\` but it is not documented in \`x-sailpoint-userLevels\`. Response is ${response.response.status}`,
+                    'message': `This endpoint supports the user level \`${response.userLevel}\` but it is not documented in \`x-sailpoint-userLevels\`.`,
                     'data': null
                 })
             }
         } else if (response.response.status === 403) {
             if (documentedUserLevels.has(response.userLevel)) {
                 uniqueErrors.errors.unsupportedUserLevels.push({
-                    'message': `This endpoint says it supports the user level \`${response.userLevel}\` but attempting to use this user level results in a 403 forbidden.`,
+                    'message': `This endpoint says it supports the user level \`${response.userLevel}\` but attempting to use this user level results in a 403 forbidden. If this endpoint supports record level authorization, this may be a false positive. Please manually verify.`,
                     'data': null
                 })
             }

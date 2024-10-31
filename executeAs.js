@@ -1,24 +1,3 @@
-/*
-TODO:
-
-Add a function in executeAsUser to delete any PAT that was last used longer than 1 minute ago. Note, there is a bug where some user levels
-can't get their access tokens (403 error). Need to fix this before implementing.
-
-Because each run of this will delete all tokens, make sure to handle 401 by regenerating the token and running it again.
-This will make the program more robust in the event that multiple instances are run and they result in the
-token being deleted before a current instance has had a chance to execute the API.
-
-Asynchronous processing
-  For scope testing, we should use an org admin or client credentials. This is inherently thread safe.
-
-Bugs in the API backend
-  Some endpoints are validating the request body before checking authorization. Authorization should be verified first. This happens on POST /v3/access-profiles
-
-  User level sp:ui-config-hub-read cannot GET personal access tokens, but it can create one.
-
-  If user level sp:ui-config-hub-read creates a PAT with empty request body, then attempting to create more results in 500
-*/
-
 const axios = require('axios').default;
 const axiosRetry = require('axios-retry')
 const dotenv = require("dotenv");
@@ -32,7 +11,6 @@ function convertToSnakeCase(text) {
 // first before creating a new access token. If the token exists in this variable, then it will be used.
 // If it doesn't exist, then a new token will be generated. This is much more efficient and prevents
 // from hitting the rate limit.
-// TODO: Because this is async, it's queuing up all 2079 requests before any tokens are added to the accessTokens object. This is running into 429 rate limit. Might need a dedicated function to prep this instead of relying on this one.
 const accessTokens = {}
 async function getAccessToken(clientId, clientSecret) {
     if (!(clientId in accessTokens)) {
