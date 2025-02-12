@@ -19,7 +19,8 @@ validate_paths () {
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
             if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
             then
-                ERRORS=$(node ../validator.js -i "../${VERSION}.yaml" -p $API_PATH --skip-filters --skip-sorters -e ../.env --github-action)
+                echo "TESTING: ${VERSION} ${API_PATH}"
+                ERRORS=$(node ../validator.js -i $VERSION -f ../ -p $API_PATH --skip-filters --skip-sorters -e ../.env --github-action)
                 if [ ! -z "$ERRORS" ]
                 then
                     echo $ERRORS
@@ -41,6 +42,7 @@ file_path_length () {
 rm -rf cloud-api-client-common
 rm v3.yaml
 rm beta.yaml
+rm v2024.yaml
 
 git clone git@github.com:sailpoint/cloud-api-client-common.git
 
@@ -52,10 +54,11 @@ cd ../
 # Build the API spec
 speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
 speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
+speccy resolve --quiet cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v2024.yaml -o v2024.yaml
 
 cd cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"
-CHANGED_FILES=$(git diff --name-only HEAD master)
+CHANGED_FILES=$(git diff --name-only master...)
 touch tested_paths.txt
 echo "Changed files: $CHANGED_FILES"
 for CHANGED_FILE in $CHANGED_FILES
@@ -77,3 +80,4 @@ cd ../
 rm -rf cloud-api-client-common
 rm v3.yaml
 rm beta.yaml
+rm v2024.yaml

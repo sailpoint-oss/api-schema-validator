@@ -10,17 +10,23 @@ const yargs = require('yargs');
 const YAML = require('yamljs');
 const filterTests = require('./filterTests')
 const sorterTests = require('./sorterTests')
+const { validateSchemaForPost, validateSchemaForSingleGetResource }  = require('./utils')
 
 function getArgs() {
     const argv = yargs
         .option('input', {
             alias: 'i',
-            description: 'Path to input file in yaml format.',
+            description: 'The API version to run against.',
             type: 'string'
         })
         .option('path', {
             alias: 'p',
             description: 'Test an individual path (ex. /accounts).  Don\'t include the version in the path.',
+            type: 'string'
+        })
+        .option('spec-folder', {
+            alias: 'f',
+            description: 'Path to the folder containing the resolved spec files',
             type: 'string'
         })
         .option('env', {
@@ -60,7 +66,7 @@ function getArgs() {
             type: 'boolean',
             default: false
         })
-        .demandOption(['input'])
+        .demandOption(['input', 'spec-folder'])
         .help()
         .alias('help', 'h').argv;
 
@@ -149,7 +155,7 @@ function findAdditionalProperties(path, data, schema) {
 }
 
 async function validateSchema(httpClient, ajv, path, spec) {
-    const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
+    const schema = spec.paths[path].get.responses['200'] ? spec.paths[path].get.responses['200'].content['application/json'].schema : spec.paths[path].get.responses['202'].content['application/json'].schema;
     res = await httpClient.get(path).catch(error => { handleResError(error) });
 
     if (res) {
@@ -216,34 +222,108 @@ async function validateSchema(httpClient, ajv, path, spec) {
     }
 }
 
-async function validatePath(httpClient, ajv, path, spec, skipSchema, skipFilters, skipSorters) {
-    if ("get" in spec.paths[path] && !path.includes('{')) {
-        const contentType = spec.paths[path].get.responses['200'].content;
+async function validatePath(version, httpClients, ajv, path, specs, skipSchema, skipFilters, skipSorters) {
+    let schemaErrors = []
+    let filterErrors = []
+    let sorterErrors = []
+    
+    if ("get" in specs[version].paths[path] && !path.includes('{')) {
+        const contentType = specs[version].paths[path].get.responses['200'] ? specs[version].paths[path].get.responses['200'].content : specs[version].paths[path].get.responses['202'].content;
         if ("application/json" in contentType) {
-            let schemaErrors = undefined
-            let filterErrors = undefined
-            let sorterErrors = undefined
             if (!skipSchema) {
-                schemaErrors = await validateSchema(httpClient, ajv, path, spec);
+                schemaErrors.push(await validateSchema(httpClients[version], ajv, path, specs[version]));
             }
             if (!skipFilters) {
-                filterErrors = await filterTests.validateFilters(httpClient, "get", spec.servers[0].url.split('.com')[1], path, spec);
+                filterErrors.push(await filterTests.validateFilters(httpClients[version], "get", specs[version].servers[0].url.split('.com')[1], path, specs[version]));
             }
             if (!skipSorters) {
-                sorterErrors = await sorterTests.validateSorters(httpClient, "get", spec.servers[0].url.split('.com')[1], path, spec);
+                sorterErrors.push(await sorterTests.validateSorters(httpClients[version], "get", specs[version].servers[0].url.split('.com')[1], path, specs[version]));
             }
-            return { schemaErrors, filterErrors, sorterErrors };
         } else {
             console.log(`Path ${path} uses ${JSON.stringify(contentType)} instead of application/json.  Skipping.`);
         }
-    } else {
-        // console.log(`Path ${path} must have a GET operation and no path parameters. Skipping...`);
-        return undefined;
     }
+
+    if ("get" in specs[version].paths[path] && path.includes('{')) {
+        const contentType = specs[version].paths[path].get.responses['200'].content;
+        if ("application/json" in contentType) {
+            if (!skipSchema) {
+                schemaErrors.push(await validateSchemaForSingleGetResource(version, httpClients, ajv, path, specs));
+            }
+        }
+    }
+
+    // console.log(schemaErrors)
+    // console.log("post" in spec.paths[path]);
+
+    // if ("post" in spec.paths[path]) {
+
+    //     schemaErrors.push(await validateSchemaForPost(httpClient, ajv, path, spec));
+    // } 
+
+
+    let allErrors = schemaErrors.concat(filterErrors).concat(sorterErrors);
+    let errorsByEndpoint = await mergeErrorsByEndpoint(allErrors);
+
+    //console.log(errorsByEndpoint);
+
+    return errorsByEndpoint;
+
 }
 
+async function mergeErrorsByEndpoint(errorModels) {
+    const disallowedKeys = ["undocumentedFilters", "unsupportedFilters", "undocumentedSorters", "unsupportedSorters"]
+    const disallowedKeySet = new Set(disallowedKeys)
+
+    let errorsByEndpoint = {};
+    for (const errorModel of errorModels) {
+        if (errorModel != undefined) {
+            let key = `${errorModel.method}${errorModel.endpoint}`;
+            if (key in errorsByEndpoint) {
+
+                // Merge schema errors
+                if(errorModel.errors != undefined && !Object.keys(errorModel.errors).some(keyCheck => disallowedKeySet.has(keyCheck))) {
+                    errorsByEndpoint[key].schemaErrors.push(...errorModel.errors);
+                }
+
+                // Merge filter errors
+                if(errorModel.errors.undocumentedFilters?.length > 0) {
+                    errorsByEndpoint[key].undocumentedFilters.push(...errorModel.errors.undocumentedFilters);
+                }
+                
+                if (errorModel.errors.unsupportedFilters?.length > 0) {
+                    errorsByEndpoint[key].unsupportedFilters.push(...errorModel.errors.unsupportedFilters);
+                }
+
+                // Merge sorter errors
+                if(errorModel.errors.undocumentedSorters?.length > 0) {
+                    errorsByEndpoint[key].undocumentedSorters.push(...errorModel.errors.undocumentedSorters);
+                }
+                
+                if (errorModel.errors.unsupportedSorters?.length > 0) {
+                    errorsByEndpoint[key].unsupportedSorters.push(...errorModel.errors.unsupportedSorters);
+                }
+
+            } else {
+                let key = `${errorModel.method}${errorModel.endpoint}`;
+
+                errorsByEndpoint[key] = {
+                    method: errorModel.method,
+                    endpoint: errorModel.endpoint,
+                    schemaErrors: !Object.keys(errorModel.errors).some(keyCheck => disallowedKeySet.has(keyCheck)) ? errorModel.errors : [],
+                    undocumentedFilters: errorModel.errors.undocumentedFilters || [],
+                    unsupportedFilters: errorModel.errors.unsupportedFilters || [],
+                    undocumentedSorters: errorModel.errors.undocumentedSorters || [],
+                    unsupportedSorters: errorModel.errors.unsupportedSorters || []
+                };
+            }
+        }
+    }
+    return errorsByEndpoint;
+  }
+
 async function getAccessToken() {
-    const url = `https://${process.env.TENANT}.api.identitynow.com/oauth/token?grant_type=client_credentials&client_id=${process.env.CLIENT_ID}&client_secret=${process.env.CLIENT_SECRET}`;
+    const url = `${process.env.BASE_URL}/oauth/token?grant_type=client_credentials&client_id=${process.env.CLIENT_ID}&client_secret=${process.env.CLIENT_SECRET}`;
     res = await axios.post(url).catch(error => {
         console.error("Unable to fetch access token.  Aborting.");
         console.error(error);
@@ -261,28 +341,61 @@ function formatData(data) {
 }
 
 async function main() {
+    const apiVersions = ['beta', 'v3', 'v2024'];
+    let specs = {};
+    let httpClients = {};
     const argv = getArgs();
-    const oas = YAML.load(argv.input);
-    result = await SwaggerClient.resolve({ spec: oas, allowMetaPatches: false });
-    spec = result.spec;
+    const version = argv.input;
+
+    // const oas = YAML.load(argv.input);
+    // result = await SwaggerClient.resolve({ spec: oas, allowMetaPatches: false });
+    // currentSpec = result.spec;
+
+    for (const version of apiVersions) {
+        const versionSpec = YAML.load(`${argv.specFolder}/${version}.yaml`);
+        resolveResult = await SwaggerClient.resolve({ spec: versionSpec, allowMetaPatches: false });
+        specs[version] = versionSpec;
+    };
+
 
     const access_token = await getAccessToken();
-    const httpClient = axios.create({
-        baseURL: spec.servers[0].url.replace('{tenant}', 'devrel'),
-        timeout: 20000, // Some endpoints can take up to 10 seconds to complete
-        headers: { 'Authorization': `Bearer ${access_token}` }
-    });
-    axiosRetry(httpClient, {
-        retries: 1000,
-        retryDelay: (retryCount, error) => {
-            //console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
-            return retryCount * 2000; // time interval between retries
-        },
-        retryCondition: (error) => {
-            return error.response.status === 429 || error.response.status === 502;
-        },
-        shouldResetTimeout: true
-    });
+
+    for (const version of apiVersions) {
+        httpClients[version] = axios.create({
+            baseURL: process.env.BASE_URL + "/" + specs[version].servers[0].url.split('/').pop(),
+            timeout: 20000, // Some endpoints can take up to 10 seconds to complete
+            headers: { 'Authorization': `Bearer ${access_token}`, 'X-SailPoint-Experimental': true }
+        });
+        axiosRetry(httpClients[version], {
+            retries: 1000,
+            retryDelay: (retryCount, error) => {
+                //console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
+                return retryCount * 2000; // time interval between retries
+            },
+            retryCondition: (error) => {
+                return error.response.status === 429 || error.response.status === 502;
+            },
+            shouldResetTimeout: true
+        });
+
+    }
+
+    // const httpClient = axios.create({
+    //     baseURL: process.env.BASE_URL + "/" + specs[version].servers[0].url.split('/').pop(),
+    //     timeout: 20000, // Some endpoints can take up to 10 seconds to complete
+    //     headers: { 'Authorization': `Bearer ${access_token}` }
+    // });
+    // axiosRetry(httpClient, {
+    //     retries: 1000,
+    //     retryDelay: (retryCount, error) => {
+    //         //console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
+    //         return retryCount * 2000; // time interval between retries
+    //     },
+    //     retryCondition: (error) => {
+    //         return error.response.status === 429 || error.response.status === 502;
+    //     },
+    //     shouldResetTimeout: true
+    // });
 
     const ajv = new Ajv({
         allErrors: true,
@@ -295,6 +408,7 @@ async function main() {
     ajv.addKeyword("x-go-name");
     ajv.addKeyword("x-go-package");
     ajv.addKeyword("x-go-enum-desc");
+    ajv.addKeyword("x-miro");
     ajv.addKeyword("example");
     ajv.addKeyword("externalDocs");
     ajv.addFormat("uuid", function (uuid) { return true; });
@@ -309,14 +423,14 @@ async function main() {
 
     const validations = [];
     if (argv.path) { // Test single path
-        if (argv.path in spec.paths) {
-            validations.push(validatePath(httpClient, ajv, argv.path, spec, argv.skipSchema, argv.skipFilters, argv.skipSorters));
+        if (argv.path in specs[version].paths) {
+            validations.push(validatePath(version, httpClients, ajv, argv.path, specs, argv.skipSchema, argv.skipFilters, argv.skipSorters));
         } else {
             console.error(`Path ${argv.path} does not exist in the spec.  Aborting...`);
         }
     } else { // Test all paths
-        for (const path in spec.paths) {
-            validations.push(validatePath(httpClient, ajv, path, spec, argv.skipSchema, argv.skipFilters, argv.skipSorters));
+        for (const path in specs[version].paths) {
+            validations.push(validatePath(version, httpClients, ajv, path, specs, argv.skipSchema, argv.skipFilters, argv.skipSorters));
         }
     }
 
@@ -326,79 +440,76 @@ async function main() {
 
     // Build the comment that will be added to the GitHub PR if there are any errors.
     if ("github-action" in argv) {
-        results.forEach(result => {
-            if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
-                output += `|${result.schemaErrors.method} ${result.schemaErrors.endpoint}|`;
-                for (const error in result.schemaErrors.errors) {
-                    if (result.schemaErrors.errors[error].data != undefined) {
-                        const data = formatData(result.schemaErrors.errors[error].data);
-                        output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary><pre>${data}</pre></details>`;
+        results.forEach(entry => {
+            Object.keys(entry).forEach((endpointKey) => {
+                if(Object.keys(entry[endpointKey].schemaErrors).length !== 0 || entry[endpointKey].undocumentedFilters.length !== 0 || entry[endpointKey].unsupportedFilters.length !== 0 || entry[endpointKey].undocumentedSorters.length !== 0 || entry[endpointKey].unsupportedSorters.length !== 0) {
+                output += `|${entry[endpointKey].method} ${entry[endpointKey].endpoint}|`;
+                Object.keys(entry[endpointKey].schemaErrors).forEach((field) => {
+                    if (entry[endpointKey].schemaErrors[field].data != undefined) {
+                        const data = formatData(entry[endpointKey].schemaErrors[field].data);
+                        output += `<details closed><summary>${entry[endpointKey].schemaErrors[field].message}</summary><pre>${data}</pre></details>`;
                     } else {
-                        output += `<details closed><summary>${result.schemaErrors.errors[error].message}</summary>`;
+                        output += `<details closed><summary>${entry[endpointKey].schemaErrors[field].message}</summary>`;
                     }
-                    totalErrors += 1;
+                        totalErrors += 1;
+                    })
+
+    
+                    for (const undocumentedFilter of entry[endpointKey].undocumentedFilters) {
+                        output += `<p>${undocumentedFilter.message}</p>`
+                        totalErrors += 1;
+                    }
+    
+                    for (const unsupportedFilter of entry[endpointKey].unsupportedFilters) {
+                        output += `<p>${unsupportedFilter.message}</p>`
+                        totalErrors += 1;
+                    }
+    
+                    for (const undocumentedSorter of entry[endpointKey].undocumentedSorters) {
+                        output += `<p>${undocumentedSorter.message}</p>`
+                        totalErrors += 1;
+                    }
+    
+                    for (const unsupportedSorter of entry[endpointKey].unsupportedSorters) {
+                        output += `<p>${unsupportedSorter.message}</p>`
+                        totalErrors += 1;
+                    }
+                    output += "|\\n";
                 }
-                output += "|\\n";
-            }
-            if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
-                output += `|${result.filterErrors.method} ${result.filterErrors.endpoint}|`;
-                for (const undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
-                    output += `<p>${undocumentedFilter.message}</p>`
-                    totalErrors += 1;
-                }
-                for (const unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
-                    output += `<p>${unsupportedFilter.message}</p>`
-                    totalErrors += 1;
-                }
-                output += "|\\n";
-            }
-            if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
-                output += `|${result.sorterErrors.method} ${result.sorterErrors.endpoint}|`;
-                for (const undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
-                    output += `<p>${undocumentedSorter.message}</p>`
-                    totalErrors += 1;
-                }
-                for (const unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
-                    output += `<p>${unsupportedSorter.message}</p>`
-                    totalErrors += 1;
-                }
-                output += "|\\n";
-            }
+                })
         });
     } else {
-        results.forEach(result => {
-            if (result && result.schemaErrors && Object.keys(result.schemaErrors.errors).length > 0) { // API errors return an undefined result
-                output += `Errors found in ${result.schemaErrors.method} ${result.schemaErrors.endpoint}\n\n`;
-                for (const error in result.schemaErrors.errors) {
-                    output += `- ${result.schemaErrors.errors[error].message}\n`;
+        results.forEach(entry => {
+            Object.keys(entry).forEach((endpointKey) => {
+            if(Object.keys(entry[endpointKey].schemaErrors).length !== 0 || entry[endpointKey].undocumentedFilters.length !== 0 || entry[endpointKey].unsupportedFilters.length !== 0 || entry[endpointKey].undocumentedSorters.length !== 0 || entry[endpointKey].unsupportedSorters.length !== 0) {
+            output += `Errors found in ${entry[endpointKey].method} ${entry[endpointKey].endpoint}\n\n`;
+                Object.keys(entry[endpointKey].schemaErrors).forEach((field) => {
+                    output += `- ${entry[endpointKey].schemaErrors[field].message}`;
+                    totalErrors += 1;
+                    output += "\n";
+                })
+
+                for (const undocumentedFilter of entry[endpointKey].undocumentedFilters) {
+                    output += `- ${undocumentedFilter.message}\n`;
                     totalErrors += 1;
                 }
-                output += "\n";
+
+                for (const unsupportedFilter of entry[endpointKey].unsupportedFilters) {
+                    output += `- ${unsupportedFilter.message}\n`;
+                    totalErrors += 1;
+                }
+
+                for (const undocumentedSorter of entry[endpointKey].undocumentedSorters) {
+                    output += `- ${undocumentedSorter.message}\n`;
+                    totalErrors += 1;
+                }
+                for (const unsupportedSorter of entry[endpointKey].unsupportedSorters) {
+                    output += `- ${unsupportedSorter.message}\n`;
+                    totalErrors += 1;
+                }
+                output += "\n\n";
             }
-            if (result && result.filterErrors && (Object.keys(result.filterErrors.errors.undocumentedFilters).length > 0 || Object.keys(result.filterErrors.errors.unsupportedFilters).length > 0)) {
-                output += `Errors found in ${result.filterErrors.method} ${result.filterErrors.endpoint}\n\n`;
-                for (const undocumentedFilter of result.filterErrors.errors.undocumentedFilters) {
-                    output += `- ${undocumentedFilter.message.replaceAll('`', '"')}\n`;
-                    totalErrors += 1;
-                }
-                for (const unsupportedFilter of result.filterErrors.errors.unsupportedFilters) {
-                    output += `- ${unsupportedFilter.message.replaceAll('`', '"')}\n`;
-                    totalErrors += 1;
-                }
-                output += "\n";
-            }
-            if (result && result.sorterErrors && (Object.keys(result.sorterErrors.errors.undocumentedSorters).length > 0 || Object.keys(result.sorterErrors.errors.unsupportedSorters).length > 0)) {
-                output += `Errors found in ${result.sorterErrors.method} ${result.sorterErrors.endpoint}\n\n`;
-                for (const undocumentedSorter of result.sorterErrors.errors.undocumentedSorters) {
-                    output += `- ${undocumentedSorter.message.replaceAll('`', '"')}\n`;
-                    totalErrors += 1;
-                }
-                for (const unsupportedSorter of result.sorterErrors.errors.unsupportedSorters) {
-                    output += `- ${unsupportedSorter.message.replaceAll('`', '"')}\n`;
-                    totalErrors += 1;
-                }
-                output += "\n";
-            }
+            })
         });
 
         if (totalErrors > 0) {
