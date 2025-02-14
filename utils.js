@@ -183,7 +183,7 @@ async function validateSchemaForSingleGetResource(
     };
   }
 
-  console.debug(`Fully resolved path: ${resolvedPath}`);
+  // console.debug(`Fully resolved path: ${resolvedPath}`);
 
   const result = await httpClients[version].get(resolvedPath).catch((error) => {
     console.debug("Error Message: " + JSON.stringify(error.response?.data));
@@ -191,7 +191,7 @@ async function validateSchemaForSingleGetResource(
 
   if (result) {
     if (result.data.length === 0) {
-      console.log(`No data found for path ${path}`);
+      // console.log(`No data found for path ${path}`);
     }
 
     let uniqueErrors = {
@@ -475,15 +475,15 @@ async function findValidPathFromResponse(
           // );
           break;
         } else {
-          console.log(`No data found for value ${identifier}.`);
+          // console.log(`No data found for value ${identifier}.`);
         }
       } catch (error) {
-        console.log(
-          `Error testing value ${identifier}: ${
-            JSON.stringify(error.response?.data) ||
-            JSON.stringify(error.message)
-          }`
-        );
+        // console.log(
+        //   `Error testing value ${identifier}: ${
+        //     JSON.stringify(error.response?.data) ||
+        //     JSON.stringify(error.message)
+        //   }`
+        // );
       }
     }
 
