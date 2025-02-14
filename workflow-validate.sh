@@ -22,7 +22,7 @@ validate_paths () {
             if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
             echo "I got here"
             then
-                ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
+                ERRORS=$(node ../api-schema-validator/validator.js -i $VERSION -f "../api-schema-validator/" -p $API_PATH --github-action)
                 if [ ! -z "$ERRORS" ]
                 then
                     echo $ERRORS
