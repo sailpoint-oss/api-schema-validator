@@ -19,8 +19,7 @@ validate_paths () {
         if echo $FILE_PATH | grep paths --quiet
         then
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            echo "API_PATH: $API_PATH for $FILE_NAME"
-            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
+            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -q -x "$API_PATH"
             then
                 ERRORS=$(node ../api-schema-validator/validator.js -i "$VERSION" -f "../api-schema-validator/" -p $API_PATH --github-action)
                 if [ ! -z "$ERRORS" ]
@@ -32,8 +31,6 @@ validate_paths () {
         elif echo $FILE_PATH | grep schemas --quiet
         then
             MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
-            echo "SCHEMA FILE: $FILE_NAME"
-            echo "MATCHING FILES FOR SCHEMA: $MATCHING_FILE_PATHS"
             validate_paths $MATCHING_FILE_PATHS
         fi
     done
@@ -55,13 +52,13 @@ touch tested_paths.txt
 
 for CHANGED_FILE in $CHANGED_FILES
 do
-    validate_paths $CHANGED_FILE
-    # if echo $VALIDATION | grep "|" --quiet
-    # then
-    #     echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below.  For more information on this PR check, please see the [API schema validator README](https://github.com/sailpoint/cloud-api-client-common#api-schema-validator).  For a list of common error messages and how to fix them, please [see this section in the README](https://github.com/sailpoint/cloud-api-client-common#common-api-validator-errors)."
-    #     echo "| Path | Errors |"
-    #     echo "|-|-|"
-    #     echo "$VALIDATION"
-    #     echo "---"
-    # fi
+    VALIDATION=$(validate_paths $CHANGED_FILE | tr -s '\n' '\n')
+    if echo $VALIDATION | grep "|" --quiet
+    then
+        echo "**${CHANGED_FILE}** is used in one or more paths that have an invalid schema.  Please fix the schema validation issues below.  For more information on this PR check, please see the [API schema validator README](https://github.com/sailpoint/cloud-api-client-common#api-schema-validator).  For a list of common error messages and how to fix them, please [see this section in the README](https://github.com/sailpoint/cloud-api-client-common#common-api-validator-errors)."
+        echo "| Path | Errors |"
+        echo "|-|-|"
+        echo "$VALIDATION"
+        echo "---"
+    fi
 done
