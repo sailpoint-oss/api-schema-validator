@@ -47,6 +47,11 @@ function getFilterableProperties(schema) {
     return filterableProperties;
 }
 
+function isValidDate(dateString) {
+    const date = new Date(dateString);
+    return !isNaN(date.getTime());
+}
+
 function parseFilters(description) {
     const filters = {};
     const lines = description.split("\n");
@@ -64,14 +69,18 @@ function parseFilters(description) {
 // Equals
 async function testEq(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} eq "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} eq ${example}` } })
     }
 
     const badMatches = res.data.filter(item => getPropByString(item, property) !== example)
-    if (badMatches.length > 0) {
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('eq')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('eq')
     } else {
         propertyToTest.supported.push('eq')
@@ -81,14 +90,24 @@ async function testEq(httpClient, example, property, path, propertyToTest) {
 // Greater than or equal
 async function testGe(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} ge "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} ge ${example}` } })
     }
 
-    const badMatches = res.data.filter(item => getPropByString(item, property) < example)
-    if (badMatches.length > 0) {
+    const badMatches = res.data.filter(item => { 
+        if(isValidDate(example)) {
+            return new Date(getPropByString(item, property)) < new Date(example)
+        } else {
+            getPropByString(item, property) <= example
+        }
+    })
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('ge')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('ge')
     } else {
         propertyToTest.supported.push('ge')
@@ -98,14 +117,23 @@ async function testGe(httpClient, example, property, path, propertyToTest) {
 // Greater than
 async function testGt(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} gt "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} gt ${example}` } })
     }
 
-    const badMatches = res.data.filter(item => getPropByString(item, property) <= example)
-    if (badMatches.length > 0) {
+    const badMatches = res.data.filter(item => { 
+        if(isValidDate(example)) {
+            return new Date(getPropByString(item, property)) <= new Date(example)
+        } else {
+            getPropByString(item, property) <= example
+        }
+    })
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('gt')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('gt')
     } else {
         propertyToTest.supported.push('gt')
@@ -115,14 +143,17 @@ async function testGt(httpClient, example, property, path, propertyToTest) {
 // Item in array
 async function testIn(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} in ("${example}")` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} in (${example})` } })
     }
 
     const badMatches = res.data.filter(item => getPropByString(item, property) !== example)
-    if (badMatches.length > 0) {
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('in')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('in')
     } else {
         propertyToTest.supported.push('in')
@@ -132,14 +163,24 @@ async function testIn(httpClient, example, property, path, propertyToTest) {
 // Less than or equal to
 async function testLe(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} le "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} le ${example}` } })
     }
 
-    const badMatches = res.data.filter(item => getPropByString(item, property) > example)
-    if (badMatches.length > 0) {
+    const badMatches = res.data.filter(item => { 
+        if(isValidDate(example)) {
+            return new Date(getPropByString(item, property)) > new Date(example)
+        } else {
+            getPropByString(item, property) > example
+        }
+    })
+    
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('le')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('le')
     } else {
         propertyToTest.supported.push('le')
@@ -149,14 +190,23 @@ async function testLe(httpClient, example, property, path, propertyToTest) {
 // Less than
 async function testLt(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} lt "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} lt ${example}` } })
     }
 
-    const badMatches = res.data.filter(item => getPropByString(item, property) >= example)
-    if (badMatches.length > 0) {
+    const badMatches = res.data.filter(item => { 
+        if(isValidDate(example)) {
+            return (new Date(getPropByString(item, property)) > new Date(example))
+        } else {
+            getPropByString(item, property) > example
+        }
+    })
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('lt')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('lt')
     } else {
         propertyToTest.supported.push('lt')
@@ -166,14 +216,17 @@ async function testLt(httpClient, example, property, path, propertyToTest) {
 // Not equals
 async function testNe(httpClient, example, property, path, propertyToTest) {
     let res = undefined
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         res = await httpClient.get(path, { params: { filters: `${property} ne "${example}"` } })
     } else {
         res = await httpClient.get(path, { params: { filters: `${property} ne ${example}` } })
     }
 
     const badMatches = res.data.filter(item => getPropByString(item, property) === example)
-    if (badMatches.length > 0) {
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('ne')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('ne')
     } else {
         propertyToTest.supported.push('ne')
@@ -186,7 +239,11 @@ async function testPr(httpClient, property, path, propertyToTest) {
     res = await httpClient.get(path, { params: { filters: `pr ${property}` } })
 
     const badMatches = res.data.filter(item => getPropByString(item, property) == null)
-    if (badMatches.length > 0) {
+
+    
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('pr')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('pr')
     } else {
         propertyToTest.supported.push('pr')
@@ -199,7 +256,10 @@ async function testIsNull(httpClient, property, path, propertyToTest) {
     res = await httpClient.get(path, { params: { filters: `${property} isnull` } })
 
     const badMatches = res.data.filter(item => getPropByString(item, property) != null)
-    if (badMatches.length > 0) {
+
+    if(res.data?.length == 0) {
+        propertyToTest.unsupported.push('isnull')
+    } else if (badMatches.length > 0) {
         propertyToTest.unsupported.push('isnull')
     } else {
         propertyToTest.supported.push('isnull')
@@ -208,11 +268,14 @@ async function testIsNull(httpClient, property, path, propertyToTest) {
 
 // Starts with
 async function testSw(httpClient, example, property, path, propertyToTest) {
-    if (typeof example === "string") {
+    if (typeof example === "string"  && !isValidDate(example)) {
         const partial = example.substring(0, example.length / 2)
         const res = await httpClient.get(path, { params: { filters: `${property} sw "${partial}"` } })
         const badMatches = res.data.filter(item => getPropByString(item, property).substring(0, example.length / 2).toLowerCase() !== partial.toLowerCase())
-        if (badMatches.length > 0) {
+        
+        if(res.data?.length == 0) {
+            propertyToTest.unsupported.push('sw')
+        } else if (badMatches.length > 0) {
             propertyToTest.unsupported.push('sw')
         } else {
             propertyToTest.supported.push('sw')
@@ -351,7 +414,7 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
 
 async function validateFilters(httpClient, method, version, path, spec) {
     let uniqueErrors = {
-        method: method,
+        method: method.toUpperCase(),
         endpoint: version + path,
         errors: {
             undocumentedFilters: [],
@@ -362,7 +425,7 @@ async function validateFilters(httpClient, method, version, path, spec) {
 
     if (spec.paths[path].get.parameters != undefined) {
         const filteredParams = spec.paths[path].get.parameters.filter(param => param.name === "filters")
-        const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
+        const schema = spec.paths[path].get.responses['200'] ? spec.paths[path].get.responses['200'].content['application/json'].schema : spec.paths[path].get.responses['202'].content['application/json'].schema;
         if (filteredParams.length == 1) {
             try {
                 documentedFilters = parseFilters(filteredParams[0].description);
@@ -402,7 +465,13 @@ async function validateFilters(httpClient, method, version, path, spec) {
                             }
                         }
                     } else {
-
+                        // A supported property with filters is not documented in the specs at all.
+                        for(supportedFilter of testedProperties[property]["supported"]) {
+                            uniqueErrors.errors['undocumentedFilters'].push({
+                                'message': `The property \`${property}\` supports the \`${supportedFilter}\` filter parameter but it is not documented.`,
+                                'data': null
+                            })
+                        }
                     }
                 }
             } catch (error) {

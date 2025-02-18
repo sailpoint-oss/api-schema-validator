@@ -19,9 +19,9 @@ validate_paths () {
         if echo $FILE_PATH | grep paths --quiet
         then
             API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -x "$API_PATH"
+            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -q -x "$API_PATH"
             then
-                ERRORS=$(node ../api-schema-validator/validator.js -i "../api-schema-validator/${VERSION}.yaml" -p $API_PATH --github-action)
+                ERRORS=$(node ../api-schema-validator/validator.js -i "$VERSION" -f "../api-schema-validator/" -p $API_PATH --github-action)
                 if [ ! -z "$ERRORS" ]
                 then
                     echo $ERRORS
@@ -43,6 +43,7 @@ file_path_length () {
 # Build the API spec
 speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
 speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
+speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v2024.yaml -o v2024.yaml
 
 cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"

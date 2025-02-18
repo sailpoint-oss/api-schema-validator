@@ -108,7 +108,7 @@ async function testSorters(httpClient, path, propertiesToTest, documentedSorters
 
 async function validateSorters(httpClient, method, version, path, spec) {
     let uniqueErrors = {
-        method: method,
+        method: method.toUpperCase(),
         endpoint: version + path,
         errors: {
             undocumentedSorters: [],
@@ -119,7 +119,7 @@ async function validateSorters(httpClient, method, version, path, spec) {
 
     if (spec.paths[path].get.parameters != undefined) {
         const filteredParams = spec.paths[path].get.parameters.filter(param => param.name === "sorters")
-        const schema = spec.paths[path].get.responses['200'].content['application/json'].schema;
+        const schema = spec.paths[path].get.responses['200'] ?  spec.paths[path].get.responses['200'].content['application/json'].schema : spec.paths[path].get.responses['202'].content['application/json'].schema;
         let documentedSorters = []
         if (filteredParams.length == 1) {
             documentedSorters = parseSorters(filteredParams[0].description);

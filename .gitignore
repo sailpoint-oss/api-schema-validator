@@ -4,6 +4,8 @@ cloud-api-client-common
 # Output files
 beta.yaml
 v3.yaml
+v2024.yaml
+
 # Secret files
 secrets.json
 .env
