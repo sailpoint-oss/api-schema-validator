@@ -1,3 +1,6 @@
+const { STATUS }  = require('./utils')
+
+
 // Find all top level attributes within the response schema that are not arrays or objects
 function getSortableProperties(schema) {
     let sortableProperties = {}
@@ -109,7 +112,9 @@ async function testSorters(httpClient, path, propertiesToTest, documentedSorters
 async function validateSorters(httpClient, method, version, path, spec) {
     let uniqueErrors = {
         method: method.toUpperCase(),
-        endpoint: version + path,
+        endpoint: path,
+        status: [],
+        tag: spec.paths[path].get.tags[0],
         errors: {
             undocumentedSorters: [],
             unsupportedSorters: []
@@ -133,6 +138,11 @@ async function validateSorters(httpClient, method, version, path, spec) {
                 if (testedProperties[property].testable) {
                     if (documentedSorters.includes(property)) {
                         if (!testedProperties[property].supported) {
+
+                            if (!uniqueErrors.status.includes(STATUS.UNSUPPORTED_SORTERS)) {
+                                uniqueErrors.status.push(STATUS.UNSUPPORTED_SORTERS);
+                            }
+
                             uniqueErrors.errors['unsupportedSorters'].push({
                                 'message': `The property \`${property}\` **MIGHT NOT** support sorting but the documentation says it does. Please manually verify.`,
                                 'data': null
@@ -140,6 +150,9 @@ async function validateSorters(httpClient, method, version, path, spec) {
                         }
                     } else {
                         if (testedProperties[property].supported) {
+                            if (!uniqueErrors.status.includes(STATUS.UNDOCUMENTED_SORTERS)) {
+                                uniqueErrors.status.push(STATUS.UNDOCUMENTED_SORTERS);
+                            }
                             uniqueErrors.errors['undocumentedSorters'].push({
                                 'message': `The property \`${property}\` **MIGHT** support sorting but it is not documented. Please manually verify.`,
                                 'data': null

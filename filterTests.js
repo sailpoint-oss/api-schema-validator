@@ -1,3 +1,5 @@
+const { STATUS }  = require('./utils')
+
 // Find all top level attributes within the response schema that are not arrays or objects
 // Assign the correct subset of operators that are applicable to each type of property.
 function getFilterableProperties(schema) {
@@ -415,7 +417,9 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
 async function validateFilters(httpClient, method, version, path, spec) {
     let uniqueErrors = {
         method: method.toUpperCase(),
-        endpoint: version + path,
+        endpoint: path,
+        status: [],
+        tag: spec.paths[path].get.tags[0],
         errors: {
             undocumentedFilters: [],
             unsupportedFilters: []
@@ -449,6 +453,11 @@ async function validateFilters(httpClient, method, version, path, spec) {
                         for (supportedFilter of testedProperties[property]["supported"]) {
                             // A supported filter is not documented
                             if (!(documentedFilters[property].includes(supportedFilter))) {
+                                
+                                if (!uniqueErrors.status.includes(STATUS.UNDOCUMENTED_FILTERS)) {
+                                    uniqueErrors.status.push(STATUS.UNDOCUMENTED_FILTERS);
+                                }
+
                                 uniqueErrors.errors['undocumentedFilters'].push({
                                     'message': `The property \`${property}\` supports the \`${supportedFilter}\` filter parameter but it is not documented.`,
                                     'data': null
@@ -458,6 +467,9 @@ async function validateFilters(httpClient, method, version, path, spec) {
                         for (documentedFilter of documentedFilters[property]) {
                             // A documented filter is not supported
                             if (!(testedProperties[property]["supported"].includes(documentedFilter))) {
+                                if (!uniqueErrors.status.includes(STATUS.UNSUPPORTED_FILTERS)) {
+                                    uniqueErrors.status.push(STATUS.UNSUPPORTED_FILTERS);
+                                }
                                 uniqueErrors.errors['unsupportedFilters'].push({
                                     'message': `The property \`${property}\` does not support the \`${documentedFilter}\` filter parameter but the documentation says it does.`,
                                     'data': null
@@ -467,6 +479,11 @@ async function validateFilters(httpClient, method, version, path, spec) {
                     } else {
                         // A supported property with filters is not documented in the specs at all.
                         for(supportedFilter of testedProperties[property]["supported"]) {
+                            
+                            if (!uniqueErrors.status.includes(STATUS.UNDOCUMENTED_FILTERS)) {
+                                uniqueErrors.status.push(STATUS.UNDOCUMENTED_FILTERS);
+                            }
+
                             uniqueErrors.errors['undocumentedFilters'].push({
                                 'message': `The property \`${property}\` supports the \`${supportedFilter}\` filter parameter but it is not documented.`,
                                 'data': null

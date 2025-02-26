@@ -1,3 +1,17 @@
+const STATUS = Object.freeze({
+  INVALID_SCHEMA: 'INVALID_SCHEMA',
+  API_SCHEMA_MISMATCH: 'API_SCHEMA_MISMATCH',
+  ADDITIONAL_PROPERTIES: 'ADDITIONAL_PROPERTIES',
+  UNDOCUMENTED_FILTERS: 'UNDOCUMENTED_FILTERS',
+  UNSUPPORTED_FILTERS: 'UNSUPPORTED_FILTERS',
+  UNDOCUMENTED_SORTERS: 'UNDOCUMENTED_SORTERS',
+  UNSUPPORTED_SORTERS: 'UNSUPPORTED_SORTERS',
+  NO_DATA: 'NO_DATA',
+  PATH_PARAM_UNRESOLVED: 'PATH_PARAM_UNRESOLVED',
+  SCHEMA_NOT_FOUND: 'SCHEMA_NOT_FOUND',
+  API_ERROR: 'API_ERROR'
+});
+
 async function validateSchemaForPost(version, httpClient, ajv, path, specs) {
   const schema = spec.paths[path].post.responses["201"]
     ? spec.paths[path].post.responses["201"].content["application/json"].schema
@@ -150,6 +164,7 @@ async function validateSchemaForSingleGetResource(
   specs
 ) {
 
+  console.log(`Validating schema for path: ${path}`);
   let schema =
     specs[version].paths[path].get.responses["200"].content["application/json"]
       .schema;
@@ -164,6 +179,8 @@ async function validateSchemaForSingleGetResource(
     return {
       method: "GET",
       endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.SCHEMA_NOT_FOUND],
       errors: {
         "Schema not found": {
           message: "Schema not found under 200 response",
@@ -179,6 +196,8 @@ async function validateSchemaForSingleGetResource(
     return {
       method: "GET",
       endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.PATH_PARAM_UNRESOLVED],
       errors: {},
     };
   }
@@ -192,11 +211,20 @@ async function validateSchemaForSingleGetResource(
   if (result) {
     if (result.data.length === 0) {
       // console.log(`No data found for path ${path}`);
+      return {
+        method: "GET",
+        endpoint: path,
+        tag: specs[version].paths[path].get.tags[0],
+        status: [STATUS.NO_DATA],
+        errors: {},
+      };
     }
 
     let uniqueErrors = {
       method: result.request.method,
       endpoint: path,
+      status: [],
+      tag: specs[version].paths[path].get.tags[0],
       errors: {},
     };
 
@@ -206,6 +234,9 @@ async function validateSchemaForSingleGetResource(
       );
 
       ajv.errors.forEach((error) => {
+        if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
+          uniqueErrors.status.push(STATUS.INVALID_SCHEMA);
+      }
         uniqueErrors.errors[error.instancePath] = {
           message: `Invalid Schema: ${error.instancePath} - ${error.message}`,
           data: error.data,
@@ -244,7 +275,10 @@ async function validateSchemaForSingleGetResource(
           const message = `Expected that ${
             error.instancePath || "response body"
           } ${error.message}. Actual value is ${error.data}.`;
-          uniqueErrors.errors[error.schemaPath] = {
+            if (!uniqueErrors.status.includes(STATUS.API_SCHEMA_MISMATCH)) {
+              uniqueErrors.status.push(STATUS.API_SCHEMA_MISMATCH);
+            }
+            uniqueErrors.errors[error.schemaPath] = {
             message,
             data: result.data[error.instancePath.split("/")[1]],
           };
@@ -255,6 +289,9 @@ async function validateSchemaForSingleGetResource(
     if (hasAdditionalProperties) {
       for (const additionalProp of additionalProperties) {
         const message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`;
+        if (!uniqueErrors.status.includes(STATUS.ADDITIONAL_PROPERTIES)) {
+          uniqueErrors.status.push(STATUS.ADDITIONAL_PROPERTIES);
+        }
         uniqueErrors.errors[additionalProp] = {
           message,
           data: result.data[0],
@@ -264,11 +301,13 @@ async function validateSchemaForSingleGetResource(
 
     return uniqueErrors;
   } else {
-    return {
+    return uniqueErrors = {
       method: "GET",
       endpoint: path,
-      errors: {},
-    };
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.API_ERROR],
+      errors: {}
+  };
   }
 }
 
@@ -293,18 +332,24 @@ async function resolvePath(version, httpClients, path, specs) {
         parameterSpec["x-sailpoint-resource-operation-id"]
       );
 
-      // console.log(`Paths for operationId ${parameterSpec["x-sailpoint-resource-operation-id"]}: ${JSON.stringify(paths)}`);
+      //console.log(`Paths for operationId ${parameterSpec["x-sailpoint-resource-operation-id"]}: ${JSON.stringify(paths)}`);
 
       const resource = findSpecByVersion(paths, version)
 
       if(resource === null) {
-      console.log(`Resource for path ${path} ${version}: ${JSON.stringify(resource)}`);
+        console.log(`Resource for path ${path} ${version}: ${JSON.stringify(resource)}`);
       }
 
       if (!resource.path.match(regex)) {
         rootPath = resource.path;
         version = resource.version;
       } else {
+        
+        if(path === resource.path) {
+          console.log(`Circular reference detected for path ${path}`);
+          return undefined;
+        }
+
         rootPath = await resolvePath(resource.version, httpClients, resource.path, specs);
       }
     }
@@ -619,4 +664,4 @@ async function cleanup(httpClient, path, id) {
   }
 }
 
-module.exports = { validateSchemaForPost, validateSchemaForSingleGetResource };
+module.exports = { validateSchemaForPost, validateSchemaForSingleGetResource, STATUS };
