@@ -407,6 +407,7 @@ console.log(`Total tested endpoints: ${data.length}`);
                               ${Object.entries(entry.schemaErrors).map(([key, error]) => `
                               <li>
                                 ${error.message}
+                                <code class="data-example">${JSON.stringify(error.data)}</code>                        
                               </li>
                               `).join('')}
                           </ul>
