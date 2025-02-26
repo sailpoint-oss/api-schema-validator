@@ -256,6 +256,15 @@ console.log(`Total tested endpoints: ${data.length}`);
             border-left: 3px solid #4CAF50;
         }
 
+        .schema-errors {
+            max-width: 100%;
+            word-wrap: break-word;
+            white-space: normal;
+            padding-right: 2%;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
 
         .error {
             color: red;
@@ -311,6 +320,9 @@ console.log(`Total tested endpoints: ${data.length}`);
 
         th {
             background-color: #f4f4f4;
+        }
+        li {
+            padding-bottom: 1%;
         }
       </style>
           <script>
