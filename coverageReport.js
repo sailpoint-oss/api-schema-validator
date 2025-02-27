@@ -232,6 +232,16 @@ console.log(`Total tested endpoints: ${data.length}`);
 
         .endpoint {
             padding: 5px 0;
+            padding: 10px;
+            background-color: #f2f2f2;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .endpoint-errors {
+            padding: 5px 0;
             cursor: pointer; /* Indicates it's clickable */
             padding: 10px;
             background-color: #f2f2f2;
@@ -242,7 +252,7 @@ console.log(`Total tested endpoints: ${data.length}`);
         }
 
         /* Hover effect for the endpoint */
-        .endpoint:hover {
+        .endpoint-errors:hover {
             background-color: #e0e0e0;
             border-color: #007BFF;
         }
@@ -253,7 +263,7 @@ console.log(`Total tested endpoints: ${data.length}`);
             margin-top: 10px;
             padding-left: 20px;
             background-color: #f9f9f9;
-            border-left: 3px solid #4CAF50;
+            border-left: 3px solid #F44336;
         }
 
         .schema-errors {
@@ -331,7 +341,7 @@ console.log(`Total tested endpoints: ${data.length}`);
           console.log("Page is fully loaded");
     
           // Select all the endpoints
-          const endpoints = document.querySelectorAll('.endpoint');
+          const endpoints = document.querySelectorAll('.endpoint-errors');
     
           // Add a click event to each endpoint
           endpoints.forEach(endpoint => {
@@ -400,7 +410,9 @@ console.log(`Total tested endpoints: ${data.length}`);
             </div>
             </div>
             ${endpoints.map(entry => `
-                <div class="endpoint">
+            ${entry.status.length > 0 ? `
+                <div class="endpoint-errors">` :
+                `<div class="endpoint">` }
                     ${entry.status.length > 0 ? `
                     <h3>${entry.method} ${entry.endpoint} ❌</h3> ` : `
                     <h3>${entry.method} ${entry.endpoint} ✅</h3>`}
