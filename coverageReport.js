@@ -264,6 +264,8 @@ console.log(`Total tested endpoints: ${data.length}`);
             padding-left: 20px;
             background-color: #f9f9f9;
             border-left: 3px solid #F44336;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .schema-errors {
@@ -273,6 +275,13 @@ console.log(`Total tested endpoints: ${data.length}`);
             padding-right: 2%;
             max-height: 400px;
             overflow-y: auto;
+        }
+
+
+
+        .unsupported-filters, .undocumented-filters, .undocumented-sorters, .unsupported-sorters {
+          padding-top: .5%;
+          padding-bottom: .5%;
         }
 
 
@@ -338,7 +347,6 @@ console.log(`Total tested endpoints: ${data.length}`);
           <script>
         // Ensure the script runs after the page is fully loaded
         document.addEventListener("DOMContentLoaded", function() {
-          console.log("Page is fully loaded");
     
           // Select all the endpoints
           const endpoints = document.querySelectorAll('.endpoint-errors');
@@ -346,7 +354,6 @@ console.log(`Total tested endpoints: ${data.length}`);
           // Add a click event to each endpoint
           endpoints.forEach(endpoint => {
             endpoint.addEventListener('click', function() {
-              console.log("Endpoint clicked!");  // Debug: check if the event fires
     
               const details = endpoint.querySelector('.endpoint-details');
               if (details.style.display === 'block') {
@@ -400,6 +407,7 @@ console.log(`Total tested endpoints: ${data.length}`);
       </div>
 
     ${Object.entries(endpointsByTag).map(([tag, endpoints]) => `
+        
         <div class="tag-section">
             <div class="tag-header">
             <h2 class="tag-title">${tag}</h2>
@@ -462,7 +470,7 @@ console.log(`Total tested endpoints: ${data.length}`);
                       <div class="undocumented-sorters">
                           <h4>Undocumented Sorters:</h4>
                           <ul>
-                              ${entry.unsupportedSorters.map( filter => `
+                              ${entry.undocumentedSorters.map( filter => `
                               <li>
                                 ${filter.message}
                               </li>
