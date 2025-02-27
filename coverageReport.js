@@ -422,15 +422,9 @@ console.log(`Total tested endpoints: ${data.length}`);
                 <div class="endpoint-errors">` :
                 `<div class="endpoint">` }
                     ${entry.status.length > 0 ? `
-                    <h3>${entry.method} ${entry.endpoint} ❌</h3> ` : `
+                    <h3>${entry.method} ${entry.endpoint} ❌</h3> 
+                    <p class="status">Status: <span>${entry.status}</span></p>` : `
                     <h3>${entry.method} ${entry.endpoint} ✅</h3>`}
-                    <p class="status">Status: <span>${entry.status}</span></p>
-                    ${entry.errors?.length > 0 ? `
-                    <ul>
-                        ${entry.errors.map(error => `
-                        <li class="error"><strong>Message:</strong> ${error.message}${error.path ? ` (Path: <code>${error.path}</code>)` : ''}</li>
-                        `).join('')}
-                    </ul>` : ""}
                     <div class="endpoint-details">
                     ${entry.schemaErrors && Object.keys(entry.schemaErrors).length > 0 ? `
                       <div class="schema-errors">
