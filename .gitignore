@@ -5,6 +5,7 @@ cloud-api-client-common
 beta.yaml
 v3.yaml
 v2024.yaml
+*Report.html
 
 # Secret files
 secrets.json

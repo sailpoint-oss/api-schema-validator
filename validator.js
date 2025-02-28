@@ -10,7 +10,9 @@ const yargs = require('yargs');
 const YAML = require('yamljs');
 const filterTests = require('./filterTests')
 const sorterTests = require('./sorterTests')
-const { validateSchemaForPost, validateSchemaForSingleGetResource }  = require('./utils')
+const fs = require('fs');
+const { validateSchemaForPost, validateSchemaForSingleGetResource, STATUS }  = require('./utils')
+const { generateHtmlReport } = require('./coverageReport')
 
 function getArgs() {
     const argv = yargs
@@ -63,6 +65,16 @@ function getArgs() {
         })
         .option('skip-schema', {
             description: "Don't run the schema validator",
+            type: 'boolean',
+            default: false
+        })
+        .option('generate-coverage-report', {
+            description: 'Generate a coverage report to view API coverage',
+            type: 'boolean',
+            default: false
+        })
+        .option('use-report-mock-data', {
+            description: 'Generate a coverage report to view API coverage using mock data',
             type: 'boolean',
             default: false
         })
@@ -156,18 +168,22 @@ function findAdditionalProperties(path, data, schema) {
 
 async function validateSchema(httpClient, ajv, path, spec) {
     const schema = spec.paths[path].get.responses['200'] ? spec.paths[path].get.responses['200'].content['application/json'].schema : spec.paths[path].get.responses['202'].content['application/json'].schema;
-    res = await httpClient.get(path).catch(error => { handleResError(error) });
+    res = await httpClient.get(path).catch(error => { 
+        handleResError(error)
+    });
 
     if (res) {
         uniqueErrors = {
             method: res.request.method,
-            endpoint: res.request.path,
+            endpoint: path,
+            tag: spec.paths[path].get.tags[0],
+            status: [],
             errors: {}
         };
 
         // TODO: Fix the workflows creator/owner enum issue and then remove this code.
         if (!ajv.validateSchema(schema)) {
-            console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
+            //console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
             return undefined;
         }
 
@@ -179,6 +195,11 @@ async function validateSchema(httpClient, ajv, path, spec) {
                 'message': error.message,
                 'data': null
             }
+
+            if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
+                uniqueErrors.status.push(STATUS.INVALID_SCHEMA);
+            }
+            
             return uniqueErrors;
         }
 
@@ -196,6 +217,10 @@ async function validateSchema(httpClient, ajv, path, spec) {
             for (const error of validate.errors) {
                 if (!(error.schemaPath in uniqueErrors.errors)) {
                     message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`
+                                        
+                    if (!uniqueErrors.status.includes(STATUS.API_SCHEMA_MISMATCH)) {
+                        uniqueErrors.status.push(STATUS.API_SCHEMA_MISMATCH);
+                    }
                     uniqueErrors.errors[error.schemaPath] = {
                         message,
                         data: res.data[error.instancePath.split('/')[1]]
@@ -208,6 +233,11 @@ async function validateSchema(httpClient, ajv, path, spec) {
         if (hasAdditionalProperties) {
             for (const additionalProp of additionalProperties) {
                 message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`
+                
+                if (!uniqueErrors.status.includes(STATUS.ADDITIONAL_PROPERTIES)) {
+                    uniqueErrors.status.push(STATUS.ADDITIONAL_PROPERTIES);
+                }
+
                 uniqueErrors.errors[additionalProp] = {
                     message,
                     data: res.data[0]
@@ -218,7 +248,13 @@ async function validateSchema(httpClient, ajv, path, spec) {
 
         return uniqueErrors;
     } else {
-        return undefined;
+        return uniqueErrors = {
+                method: "GET",
+                endpoint: path,
+                tag: spec.paths[path].get.tags[0],
+                status: [STATUS.API_ERROR],
+                errors: {}
+            };
     }
 }
 
@@ -253,20 +289,11 @@ async function validatePath(version, httpClients, ajv, path, specs, skipSchema, 
         }
     }
 
-    // console.log(schemaErrors)
-    // console.log("post" in spec.paths[path]);
-
-    // if ("post" in spec.paths[path]) {
-
-    //     schemaErrors.push(await validateSchemaForPost(httpClient, ajv, path, spec));
-    // } 
-
 
     let allErrors = schemaErrors.concat(filterErrors).concat(sorterErrors);
+
     let errorsByEndpoint = await mergeErrorsByEndpoint(allErrors);
-
-    //console.log(errorsByEndpoint);
-
+    
     return errorsByEndpoint;
 
 }
@@ -280,6 +307,11 @@ async function mergeErrorsByEndpoint(errorModels) {
         if (errorModel != undefined) {
             let key = `${errorModel.method}${errorModel.endpoint}`;
             if (key in errorsByEndpoint) {
+
+                // Merge status codes
+                if(errorModel.status.length > 0) {
+                    errorsByEndpoint[key].status.push(...errorModel.status);
+                }
 
                 // Merge schema errors
                 if(errorModel.errors != undefined && !Object.keys(errorModel.errors).some(keyCheck => disallowedKeySet.has(keyCheck))) {
@@ -310,6 +342,8 @@ async function mergeErrorsByEndpoint(errorModels) {
                 errorsByEndpoint[key] = {
                     method: errorModel.method,
                     endpoint: errorModel.endpoint,
+                    tag: errorModel.tag,
+                    status: errorModel.status,
                     schemaErrors: !Object.keys(errorModel.errors).some(keyCheck => disallowedKeySet.has(keyCheck)) ? errorModel.errors : [],
                     undocumentedFilters: errorModel.errors.undocumentedFilters || [],
                     unsupportedFilters: errorModel.errors.unsupportedFilters || [],
@@ -347,10 +381,6 @@ async function main() {
     const argv = getArgs();
     const version = argv.input;
 
-    // const oas = YAML.load(argv.input);
-    // result = await SwaggerClient.resolve({ spec: oas, allowMetaPatches: false });
-    // currentSpec = result.spec;
-
     for (const version of apiVersions) {
         const versionSpec = YAML.load(`${argv.specFolder}/${version}.yaml`);
         resolveResult = await SwaggerClient.resolve({ spec: versionSpec, allowMetaPatches: false });
@@ -379,23 +409,6 @@ async function main() {
         });
 
     }
-
-    // const httpClient = axios.create({
-    //     baseURL: process.env.BASE_URL + "/" + specs[version].servers[0].url.split('/').pop(),
-    //     timeout: 20000, // Some endpoints can take up to 10 seconds to complete
-    //     headers: { 'Authorization': `Bearer ${access_token}` }
-    // });
-    // axiosRetry(httpClient, {
-    //     retries: 1000,
-    //     retryDelay: (retryCount, error) => {
-    //         //console.log(`retry attempt ${retryCount} for ${error.response.request.path}.`);
-    //         return retryCount * 2000; // time interval between retries
-    //     },
-    //     retryCondition: (error) => {
-    //         return error.response.status === 429 || error.response.status === 502;
-    //     },
-    //     shouldResetTimeout: true
-    // });
 
     const ajv = new Ajv({
         allErrors: true,
@@ -435,6 +448,7 @@ async function main() {
     }
 
     const results = await Promise.all(validations);
+
     let totalErrors = 0;
     let output = "";
 
@@ -514,6 +528,20 @@ async function main() {
 
         if (totalErrors > 0) {
             output += `Total errors: ${totalErrors}`;
+        }
+    }
+
+    if("generate-coverage-report" in argv) {
+        // console.log(`Total Endpoints: ${Object.keys(specs[version].paths).length}`);
+        // fs.writeFileSync('coverageReport.json', JSON.stringify(filteredResults, null, 2), 'utf8');
+
+        if("use-report-mock-data" in argv) {
+            const mockData = JSON.parse(fs.readFileSync('mockCoverageReport.json', 'utf8'));
+            fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(mockData, Object.keys(specs[version].paths).length, version));
+        } else {
+            const filteredResults = results.filter(obj => Object.keys(obj).length > 0);
+            const totalEndpoints = Object.keys(specs[version].paths).length;
+            fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(filteredResults, totalEndpoints, version));
         }
     }
 
