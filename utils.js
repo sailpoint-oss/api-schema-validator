@@ -164,7 +164,7 @@ async function validateSchemaForSingleGetResource(
   specs
 ) {
 
-  console.log(`Validating schema for path: ${path}`);
+  //console.log(`Validating schema for path: ${path}`);
   let schema =
     specs[version].paths[path].get.responses["200"].content["application/json"]
       .schema;
@@ -229,9 +229,7 @@ async function validateSchemaForSingleGetResource(
     };
 
     if (!ajv.validateSchema(schema)) {
-      console.log(
-        `The schema for path ${path} is invalid.\n${JSON.stringify(ajv.errors)}`
-      );
+      //console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(ajv.errors)}`);
 
       ajv.errors.forEach((error) => {
         if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
@@ -337,16 +335,16 @@ async function resolvePath(version, httpClients, path, specs) {
       const resource = findSpecByVersion(paths, version)
 
       if(resource === null) {
-        console.log(`Resource for path ${path} ${version}: ${JSON.stringify(resource)}`);
+        //console.log(`Resource for path ${path} ${version}: ${JSON.stringify(resource)}`);
+        return undefined;
       }
 
       if (!resource.path.match(regex)) {
         rootPath = resource.path;
         version = resource.version;
       } else {
-        
         if(path === resource.path) {
-          console.log(`Circular reference detected for path ${path}`);
+          //console.log(`Circular reference detected for path ${path}`);
           return undefined;
         }
 
@@ -374,14 +372,14 @@ async function resolvePath(version, httpClients, path, specs) {
             // );
             break;
           } else {
-            console.debug(`No data found for ENUM value ${enumValue}.`);
+            //console.debug(`No data found for ENUM value ${enumValue}.`);
           }
         } catch (error) {
-          console.log(
-            `Error testing ENUM value ${enumValue}: ${
-              error.response?.data || error.message
-            }`
-          );
+          // console.log(
+          //   `Error testing ENUM value ${enumValue}: ${
+          //     error.response?.data || error.message
+          //   }`
+          // );
 
           //Hard code for now. Need to find a better way to handle this.
           if (testPath.includes("/search/")) {
@@ -413,7 +411,7 @@ async function resolvePath(version, httpClients, path, specs) {
                   });
 
                 if (!rootResponse || rootResponse.data.length === 0) {
-                  console.debug(`No data found in ${rootPath}`);
+                  //console.debug(`No data found in ${rootPath}`);
                   return undefined;
                 }
 
@@ -446,9 +444,9 @@ async function resolvePath(version, httpClients, path, specs) {
       }
 
       if (!validResponse) {
-        console.debug(
-          `Exhausted ENUM values for ${match[0]} without valid data.`
-        );
+        // console.debug(
+        //   `Exhausted ENUM values for ${match[0]} without valid data.`
+        // );
         return undefined;
       }
     } else {
@@ -459,7 +457,7 @@ async function resolvePath(version, httpClients, path, specs) {
         });
 
       if (!rootResponse || rootResponse.data.length === 0) {
-        console.debug(`No data found in ${rootPath}`);
+        //console.debug(`No data found in ${rootPath}`);
         return undefined;
       }
 
@@ -545,14 +543,14 @@ async function findValidPathFromResponse(
         //   `Resolved variable ${paramName} with value ${identifier}. Current path: ${resolvedPath}`
         // );
       } else {
-        console.debug(`No data found for value ${identifier}.`);
+        //console.debug(`No data found for value ${identifier}.`);
       }
     } catch (error) {
-      console.log(
-        `Error testing value ${identifier}: ${
-          JSON.stringify(error.response?.data) || JSON.stringify(error.message)
-        }`
-      );
+      // console.log(
+      //   `Error testing value ${identifier}: ${
+      //     JSON.stringify(error.response?.data) || JSON.stringify(error.message)
+      //   }`
+      // );
     }
   } else {
     console.debug("Invalid response object");
@@ -656,11 +654,11 @@ function createExample(schema) {
 
 async function cleanup(httpClient, path, id) {
   result = await httpClient.delete(path + "/" + id).catch((error) => {
-    console.log(error.response.data);
+    //console.log(error.response.data);
   });
 
   if (result) {
-    console.log(`Deleted ${id} from ${path}`);
+    //console.log(`Deleted ${id} from ${path}`);
   }
 }
 

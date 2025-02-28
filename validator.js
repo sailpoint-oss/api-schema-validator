@@ -183,7 +183,7 @@ async function validateSchema(httpClient, ajv, path, spec) {
 
         // TODO: Fix the workflows creator/owner enum issue and then remove this code.
         if (!ajv.validateSchema(schema)) {
-            console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
+            //console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
             return undefined;
         }
 

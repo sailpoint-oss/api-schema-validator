@@ -400,7 +400,7 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
             }
         }
     } else {
-        console.debug(`No data for ${path}`)
+        // console.debug(`No data for ${path}`)
         // No data found.  Add all documented filters as "supported" until we have data to test otherwise.
         for (property in documentedFilters) {
             for (filter of documentedFilters[property]) {

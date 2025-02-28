@@ -53,21 +53,6 @@ const validEndpoints = data.filter(item => {
   return item[key].status.length === 0;
 }).length;
 
-console.log(`Total tested endpoints with no errors: ${validEndpoints}`);
-console.log(`Total tested endpoints with errors: ${data.length - validEndpoints}`);
-console.log(`Total tested endpoints with unsupported sorters: ${countEndpointsByStatus(data, "UNSUPPORTED_SORTERS")}`);
-console.log(`Total tested endpoints with undocumented sorters: ${countEndpointsByStatus(data, "UNDOCUMENTED_SORTERS")}`);
-console.log(`Total tested endpoints with unsupported filters: ${countEndpointsByStatus(data, "UNSUPPORTED_FILTERS")}`);
-console.log(`Total tested endpoints with undocumented filters: ${countEndpointsByStatus(data, "UNDOCUMENTED_FILTERS")}`);
-console.log(`Total tested endpoints with additional properties: ${countEndpointsByStatus(data, "ADDITIONAL_PROPERTIES")}`);
-console.log(`Total tested endpoints with API errors: ${countEndpointsByStatus(data, "API_ERROR")}`);
-console.log(`Total tested endpoints with API schema mismatch: ${countEndpointsByStatus(data, "API_SCHEMA_MISMATCH")}`);
-console.log(`Total tested endpoints with invalid schema: ${countEndpointsByStatus(data, "INVALID_SCHEMA")}`);
-console.log(`Total tested endpoints with no data: ${countEndpointsByStatus(data, "NO_DATA")}`);
-console.log(`Total tested endpoints with path param unresolved: ${countEndpointsByStatus(data, "PATH_PARAM_UNRESOLVED")}`);
-console.log(`Total tested endpoints with schema not found: ${countEndpointsByStatus(data, "SCHEMA_NOT_FOUND")}`);
-console.log(`Total tested endpoints: ${data.length}`);
-
     return `<!DOCTYPE html>
   <html lang="en">
   <head>
@@ -433,7 +418,6 @@ console.log(`Total tested endpoints: ${data.length}`);
                               ${Object.entries(entry.schemaErrors).map(([key, error]) => `
                               <li>
                                 ${error.message}
-                                <code class="data-example">${JSON.stringify(error.data)}</code>                        
                               </li>
                               `).join('')}
                           </ul>
