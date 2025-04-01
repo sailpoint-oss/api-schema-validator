@@ -531,19 +531,19 @@ async function main() {
         }
     }
 
-    if("generate-coverage-report" in argv) {
-        // console.log(`Total Endpoints: ${Object.keys(specs[version].paths).length}`);
-        // fs.writeFileSync('coverageReport.json', JSON.stringify(filteredResults, null, 2), 'utf8');
+    // if("generate-coverage-report" in argv) {
+    //     // console.log(`Total Endpoints: ${Object.keys(specs[version].paths).length}`);
+    //     // fs.writeFileSync('coverageReport.json', JSON.stringify(filteredResults, null, 2), 'utf8');
 
-        if("use-report-mock-data" in argv) {
-            const mockData = JSON.parse(fs.readFileSync('mockCoverageReport.json', 'utf8'));
-            fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(mockData, Object.keys(specs[version].paths).length, version));
-        } else {
-            const filteredResults = results.filter(obj => Object.keys(obj).length > 0);
-            const totalEndpoints = Object.keys(specs[version].paths).length;
-            fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(filteredResults, totalEndpoints, version));
-        }
-    }
+    //     if("use-report-mock-data" in argv) {
+    //         const mockData = JSON.parse(fs.readFileSync('mockCoverageReport.json', 'utf8'));
+    //         fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(mockData, Object.keys(specs[version].paths).length, version));
+    //     } else {
+    //         const filteredResults = results.filter(obj => Object.keys(obj).length > 0);
+    //         const totalEndpoints = Object.keys(specs[version].paths).length;
+    //         fs.writeFileSync(`${version}CoverageReport.html`, generateHtmlReport(filteredResults, totalEndpoints, version));
+    //     }
+    // }
 
     if (totalErrors > 0) {
         console.log(output);
