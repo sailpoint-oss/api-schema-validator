@@ -414,7 +414,7 @@ async function testFilters(httpClient, path, property, propertyToTest, documente
     return propertyObject
 }
 
-async function validateFilters(httpClient, method, version, path, spec) {
+async function validateFilters(httpClient, method, path, spec) {
     let uniqueErrors = {
         method: method.toUpperCase(),
         endpoint: path,

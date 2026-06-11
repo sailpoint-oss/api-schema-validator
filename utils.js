@@ -1,3 +1,8 @@
+'use strict';
+
+const axios = require('axios').default;
+const axiosRetry = require('axios-retry').default;
+
 const STATUS = Object.freeze({
   INVALID_SCHEMA: 'INVALID_SCHEMA',
   API_SCHEMA_MISMATCH: 'API_SCHEMA_MISMATCH',
@@ -12,342 +17,248 @@ const STATUS = Object.freeze({
   API_ERROR: 'API_ERROR'
 });
 
-async function validateSchemaForPost(version, httpClient, ajv, path, specs) {
-  const schema = spec.paths[path].post.responses["201"]
-    ? spec.paths[path].post.responses["201"].content["application/json"].schema
-    : spec.paths[path].post.responses["202"].content["application/json"].schema;
+// ---------------------------------------------------------------------------
+// HTTP client factory — supports both URL routing patterns:
+//   Old: BASE_URL/{version}/resource  (server URL ends with /v3, /beta, /v2024, etc.)
+//   New: BASE_URL/resource/v{x}/resource  (server URL is just the domain, version is inline in path)
+// ---------------------------------------------------------------------------
+function buildHttpClient(spec, baseUrl, token) {
+  const serverUrl = spec.servers[0].url;
+  const isVersionPrefixed = /\/(v\d+|beta)$/.test(serverUrl);
+  const computedBaseURL = isVersionPrefixed
+    ? baseUrl + '/' + serverUrl.split('/').pop()
+    : baseUrl;
 
-  const postBody = createExample(
-    spec.paths[path].post.requestBody.content["application/json"].schema
-  );
-
-  console.debug(postBody);
-
-  res = await httpClient.post(path, postBody).catch((error) => {
-    uniqueErrors = {
-      method: error.request.method,
-      endpoint: error.request.path,
-      errors: {},
-    };
-
-    uniqueErrors.errors["Request failed"] = {
-      message: error.response.data.detailCode,
-      data: null,
-    };
-    console.debug(error.response.data);
-
-    return uniqueErrors;
+  const client = axios.create({
+    baseURL: computedBaseURL,
+    timeout: 20000,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'X-SailPoint-Experimental': true,
+      'SLPT-ROUTE-SPEC': 'dev-test_feature_v1-routes'
+    }
   });
 
-  if (res.errors == undefined) {
-    uniqueErrors = {
-      method: res.request?.method,
-      endpoint: res.request?.path,
-      errors: {},
-    };
+  axiosRetry(client, {
+    retries: 1000,
+    retryDelay: (retryCount) => retryCount * 2000,
+    retryCondition: (error) => {
+      return error.response?.status === 429 || error.response?.status === 502;
+    },
+    shouldResetTimeout: true
+  });
 
-    console.debug(res.data);
-    // // TODO: Fix the workflows creator/owner enum issue and then remove this code.
-    // if (!ajv.validateSchema(schema)) {
-    //     console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(schema)}`)
-    //     return undefined;
-    // }
-
-    if (res.data?.id) {
-      await cleanup(httpClient, path, res.data.id)
-        .then(() => {
-          console.log("Cleanup successful");
-        })
-        .catch((error) => {
-          console.log(error.response.data);
-        });
-    }
-
-    let validate = undefined;
-    try {
-      validate = ajv.compile(schema);
-    } catch (error) {
-      uniqueErrors.errors["Invalid schema"] = {
-        message: error.message,
-        data: null,
-      };
-      return uniqueErrors;
-    }
-
-    const passesAJV = validate(res.data);
-
-    // Check for additional properties not defined in the schema
-
-    res.data = Array.isArray(res.data) ? res.data : [res.data];
-
-    const additionalProperties =
-      "items" in schema
-        ? findAdditionalProperties("", res.data[0], schema.items.properties)
-        : findAdditionalProperties("", res.data[0], schema.properties);
-    const hasAdditionalProperties =
-      Object.keys(additionalProperties).length === 0 ? false : true;
-
-    // If AJV finds issues, report each issue
-    if (!passesAJV) {
-      // Since there can be up to 250 items in the response data, we don't want to have
-      // the same error message appear multiple times.
-      // This will allow us to have one error for each unique schema violation.
-      for (const error of validate.errors) {
-        if (!(error.schemaPath in uniqueErrors.errors)) {
-          message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`;
-          uniqueErrors.errors[error.schemaPath] = {
-            message,
-            data: res.data[error.instancePath.split("/")[1]],
-          };
-        }
-      }
-    }
-
-    // If there are additional properties, report each property
-    if (hasAdditionalProperties) {
-      for (const additionalProp of additionalProperties) {
-        message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`;
-        uniqueErrors.errors[additionalProp] = {
-          message,
-          data: res.data[0],
-        };
-      }
-    }
-
-    return uniqueErrors;
-  } else {
-    return res;
-  }
+  return client;
 }
 
+// ---------------------------------------------------------------------------
+// Shared schema helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * OpenAPI 3.0 uses `{ nullable: true }` as a standalone allOf entry to express
+ * "this field can also be null" — e.g. `allOf: [{ $ref: Foo }, { nullable: true }]`.
+ * AJV 8.17+ rejects schemas where `nullable` appears without a sibling `type`.
+ *
+ * This normalizer strips those standalone { nullable } entries from allOf arrays
+ * (and recurses into all sub-schemas) before the schema is passed to ajv.compile().
+ * An entry is considered "standalone nullable" if it has the `nullable` key but
+ * none of the type-constraining keywords (type, $ref, properties, items, allOf,
+ * anyOf, oneOf, enum, format, pattern, minimum, maximum, etc.).
+ * Metadata-only keys (description, example, title) are ignored.
+ * Schemas of the form `{ type: 'string', nullable: true }` are already handled
+ * natively by AJV and are left untouched.
+ */
+
+const VALIDATING_KEYWORDS = new Set([
+  'type', '$ref', 'properties', 'items', 'allOf', 'anyOf', 'oneOf', 'not',
+  'enum', 'format', 'pattern', 'minimum', 'maximum', 'exclusiveMinimum',
+  'exclusiveMaximum', 'minLength', 'maxLength', 'minItems', 'maxItems',
+  'minProperties', 'maxProperties', 'required', 'additionalProperties',
+  'const', 'if', 'then', 'else', 'contains', 'unevaluatedProperties'
+]);
+
+function isStandaloneNullable(entry) {
+  if (typeof entry !== 'object' || entry === null || !('nullable' in entry)) return false;
+  return !Object.keys(entry).some(k => VALIDATING_KEYWORDS.has(k));
+}
+
+function normalizeNullable(schema) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  let s = { ...schema };
+
+  if (typeof s.properties === 'object' && s.properties !== null) {
+    const props = {};
+    for (const [k, v] of Object.entries(s.properties)) props[k] = normalizeNullable(v);
+    s.properties = props;
+  }
+  if (s.items) s.items = normalizeNullable(s.items);
+  if (Array.isArray(s.anyOf)) s.anyOf = s.anyOf.map(normalizeNullable);
+  if (Array.isArray(s.oneOf)) s.oneOf = s.oneOf.map(normalizeNullable);
+
+  if (Array.isArray(s.allOf)) {
+    const filtered = s.allOf
+      .filter(entry => !isStandaloneNullable(entry))
+      .map(normalizeNullable);
+    if (filtered.length === 0) delete s.allOf;
+    else s.allOf = filtered;
+  }
+
+  return s;
+}
+
+/**
+ * Recursively walk response data against spec schema properties and collect
+ * dot-notation paths for fields that are present in the data but absent from
+ * the schema (i.e. additional/undocumented properties).
+ */
+function findAdditionalProperties(path, data, schema) {
+  let additionalProps = [];
+  for (const prop in data) {
+    if (schema != undefined) {
+      const fullPath = path === '' ? prop : path + '.' + prop;
+      if (!(prop in schema)) {
+        additionalProps.push(fullPath);
+      } else if (
+        Array.isArray(data[prop]) &&
+        typeof data[prop][0] === 'object' &&
+        schema[prop].type === 'array' &&
+        schema[prop].items?.type === 'object'
+      ) {
+        const result = findAdditionalProperties(fullPath, data[prop][0], schema[prop].items.properties);
+        if (result.length > 0) additionalProps = additionalProps.concat(result);
+      } else if (data[prop] != null && !Array.isArray(data[prop]) && typeof data[prop] === 'object') {
+        const result = findAdditionalProperties(fullPath, data[prop], schema[prop].properties);
+        if (result.length > 0) additionalProps = additionalProps.concat(result);
+      }
+    }
+  }
+  return additionalProps;
+}
+
+// ---------------------------------------------------------------------------
+// Path resolution helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Search all spec versions for any path+method whose operationId matches.
+ * Returns an array of { version, method, path } objects.
+ */
 function findPathWithOperationId(specs, operationId) {
   const result = [];
-  // const paths = spec.paths;
-
-  // Iterate through paths and methods to find the matching operationId
-  for(const version in specs) {
+  for (const version in specs) {
     for (const path in specs[version].paths) {
       const methods = specs[version].paths[path];
       for (const method in methods) {
         const operation = methods[method];
         if (operation.operationId === operationId) {
-          result.push({version, method, path});
+          result.push({ version, method, path });
         }
       }
     }
   }
-
   return result;
 }
 
+/**
+ * Given an array of { version, path } entries from findPathWithOperationId,
+ * return the entry for the requested version. Falls back in priority order:
+ * v2026 → v2025 → v2024 → v3 → beta.
+ */
 function findSpecByVersion(paths, version) {
-  const priority = ["v2024", "v3", "beta"];
+  const priority = ['v2026', 'v2025', 'v2024', 'v3', 'beta'];
 
-  // Try to find exact match
   const exactMatch = paths.find(p => p.version === version);
   if (exactMatch) return exactMatch;
 
-  // Fallback to the first available spec in priority order
   for (const fallback of priority) {
-      const fallbackMatch = paths.find(p => p.version === fallback);
-      if (fallbackMatch) return fallbackMatch;
+    const fallbackMatch = paths.find(p => p.version === fallback);
+    if (fallbackMatch) return fallbackMatch;
   }
 
-  return null; // If no match is found
+  return null;
 }
 
-async function validateSchemaForSingleGetResource(
-  version,
-  httpClients,
-  ajv,
-  path,
-  specs
-) {
+function findValueByKey(response, keyToFind) {
+  if (typeof response !== 'object' || response === null) return null;
 
-  //console.log(`Validating schema for path: ${path}`);
-  let schema =
-    specs[version].paths[path].get.responses["200"].content["application/json"]
-      .schema;
-
-  if(schema !== undefined) {
-    if (schema.anyOf !== undefined) {
-      schema = schema.anyOf[0];
-    } else if (schema.oneOf !== undefined) {
-      schema = schema.oneOf[0];
-    }
-  } else {
-    return {
-      method: "GET",
-      endpoint: path,
-      tag: specs[version].paths[path].get.tags[0],
-      status: [STATUS.SCHEMA_NOT_FOUND],
-      errors: {
-        "Schema not found": {
-          message: "Schema not found under 200 response",
-          data: null,
-        },
-      },
-    }; 
+  for (const key in response) {
+    if (key === keyToFind) return response[key];
   }
 
-  const resolvedPath = await resolvePath(version, httpClients, path, specs);
+  return response.id ? response.id : response.name;
+}
 
-  if (!resolvedPath) {
-    return {
-      method: "GET",
-      endpoint: path,
-      tag: specs[version].paths[path].get.tags[0],
-      status: [STATUS.PATH_PARAM_UNRESOLVED],
-      errors: {},
-    };
-  }
+async function findValidPathFromResponse(response, httpClients, version, path, paramName) {
+  const regex = /{([^}]+)}/g;
 
-  // console.debug(`Fully resolved path: ${resolvedPath}`);
+  // Quick check: if the first record directly resolves without more params, use it
+  const identifier0 = findValueByKey(response[0], paramName.slice(1, -1));
+  const testPath0 = path.replace(paramName, identifier0);
+  if (testPath0.match(regex)) return testPath0; // still has unresolved params — return as-is for outer loop
 
-  const result = await httpClients[version].get(resolvedPath).catch((error) => {
-    console.debug("Error Message: " + JSON.stringify(error.response?.data));
-  });
+  let resolvedPath = '';
 
-  if (result) {
-    if (result.data.length === 0) {
-      // console.log(`No data found for path ${path}`);
-      return {
-        method: "GET",
-        endpoint: path,
-        tag: specs[version].paths[path].get.tags[0],
-        status: [STATUS.NO_DATA],
-        errors: {},
-      };
-    }
+  if (Array.isArray(response)) {
+    for (const record of response) {
+      const identifier = findValueByKey(record, paramName.slice(1, -1));
+      const testPath = path.replace(paramName, identifier);
 
-    let uniqueErrors = {
-      method: result.request.method,
-      endpoint: path,
-      status: [],
-      tag: specs[version].paths[path].get.tags[0],
-      errors: {},
-    };
-
-    if (!ajv.validateSchema(schema)) {
-      //console.log(`The schema for path ${path} is invalid.\n${JSON.stringify(ajv.errors)}`);
-
-      ajv.errors.forEach((error) => {
-        if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
-          uniqueErrors.status.push(STATUS.INVALID_SCHEMA);
+      try {
+        const rootResponse = await httpClients[version].get(testPath);
+        if (rootResponse.data) {
+          resolvedPath = path.replace(paramName, identifier);
+          break;
+        }
+      } catch {
+        // try next record
       }
-        uniqueErrors.errors[error.instancePath] = {
-          message: `Invalid Schema: ${error.instancePath} - ${error.message}`,
-          data: error.data,
-        };
-      });
-
-      return uniqueErrors;
     }
-
-    let validate;
+  } else if (typeof response === 'object' && response !== null) {
+    const identifier = findValueByKey(response, paramName.slice(1, -1));
+    const testPath = path.replace(paramName, identifier);
     try {
-      validate = ajv.compile(schema);
-    } catch (error) {
-      uniqueErrors.errors["Invalid schema"] = {
-        message: error.message,
-        data: null,
-      };
-      return uniqueErrors;
-    }
-
-    const passesAJV = validate(result.data);
-
-    result.data = Array.isArray(result.data) ? result.data : [result.data];
-
-    const additionalProperties =
-      "items" in schema
-        ? findAdditionalProperties("", result.data[0], schema.items.properties)
-        : findAdditionalProperties("", result.data[0], schema.properties);
-
-    const hasAdditionalProperties =
-      Object.keys(additionalProperties).length === 0 ? false : true;
-
-    if (!passesAJV) {
-      for (const error of validate.errors) {
-        if (!(error.schemaPath in uniqueErrors.errors)) {
-          const message = `Expected that ${
-            error.instancePath || "response body"
-          } ${error.message}. Actual value is ${error.data}.`;
-            if (!uniqueErrors.status.includes(STATUS.API_SCHEMA_MISMATCH)) {
-              uniqueErrors.status.push(STATUS.API_SCHEMA_MISMATCH);
-            }
-            uniqueErrors.errors[error.schemaPath] = {
-            message,
-            data: result.data[error.instancePath.split("/")[1]],
-          };
-        }
+      const rootResponse = await httpClients[version].get(testPath);
+      if (rootResponse.data) {
+        resolvedPath = path.replace(paramName, identifier);
       }
+    } catch {
+      // no-op
     }
-
-    if (hasAdditionalProperties) {
-      for (const additionalProp of additionalProperties) {
-        const message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`;
-        if (!uniqueErrors.status.includes(STATUS.ADDITIONAL_PROPERTIES)) {
-          uniqueErrors.status.push(STATUS.ADDITIONAL_PROPERTIES);
-        }
-        uniqueErrors.errors[additionalProp] = {
-          message,
-          data: result.data[0],
-        };
-      }
-    }
-
-    return uniqueErrors;
-  } else {
-    return uniqueErrors = {
-      method: "GET",
-      endpoint: path,
-      tag: specs[version].paths[path].get.tags[0],
-      status: [STATUS.API_ERROR],
-      errors: {}
-  };
   }
+
+  return resolvedPath;
 }
 
+/**
+ * Substitute real IDs/values into all {param} tokens in a parameterized path
+ * so that a single-resource GET can be executed.
+ */
 async function resolvePath(version, httpClients, path, specs) {
-  // Get the schema of the response of the GET request
   let resolvedPath = path;
-  const regex = /{([^}]+)}/g; // Matches content inside curly brackets
+  const regex = /{([^}]+)}/g;
 
   while (regex.test(resolvedPath)) {
     const match = resolvedPath.match(regex);
     if (!match) break;
 
-    let rootPath = resolvedPath.split(match[0])[0].slice(0, -1); // Remove the trailing /
-    const paramName = match[0].slice(1, -1); // Extract the variable name without {}
+    let rootPath = resolvedPath.split(match[0])[0].slice(0, -1);
+    const paramName = match[0].slice(1, -1);
     const parameterSpec = specs[version].paths[path]?.get?.parameters?.find(
       (param) => param.name === paramName
     );
 
-    if (parameterSpec?.["x-sailpoint-resource-operation-id"] !== undefined) {
-      const paths = findPathWithOperationId(
-        specs,
-        parameterSpec["x-sailpoint-resource-operation-id"]
-      );
+    if (parameterSpec?.['x-sailpoint-resource-operation-id'] !== undefined) {
+      const paths = findPathWithOperationId(specs, parameterSpec['x-sailpoint-resource-operation-id']);
+      const resource = findSpecByVersion(paths, version);
 
-      //console.log(`Paths for operationId ${parameterSpec["x-sailpoint-resource-operation-id"]}: ${JSON.stringify(paths)}`);
-
-      const resource = findSpecByVersion(paths, version)
-
-      if(resource === null) {
-        //console.log(`Resource for path ${path} ${version}: ${JSON.stringify(resource)}`);
-        return undefined;
-      }
+      if (resource === null) return undefined;
 
       if (!resource.path.match(regex)) {
         rootPath = resource.path;
         version = resource.version;
       } else {
-        if(path === resource.path) {
-          //console.log(`Circular reference detected for path ${path}`);
-          return undefined;
-        }
-
+        if (path === resource.path) return undefined; // circular reference guard
         rootPath = await resolvePath(resource.version, httpClients, resource.path, specs);
       }
     }
@@ -357,85 +268,52 @@ async function resolvePath(version, httpClients, path, specs) {
 
       for (const enumValue of parameterSpec.schema.enum) {
         const testPath = resolvedPath.replace(match[0], enumValue);
-        // console.debug(
-        //   `Testing ENUM variable ${match[0]} with value ${enumValue}. Path: ${testPath}`
-        // );
 
         try {
-          const rootResponse = await httpClients["v2024"].get(testPath);
+          const rootResponse = await httpClients[version].get(testPath);
 
           if (rootResponse.data && rootResponse.data.length > 0) {
             validResponse = rootResponse;
             resolvedPath = resolvedPath.replace(match[0], enumValue);
-            // console.debug(
-            //   `Resolved ENUM variable ${match[0]} with value ${enumValue}. Current path: ${resolvedPath}`
-            // );
             break;
-          } else {
-            //console.debug(`No data found for ENUM value ${enumValue}.`);
           }
-        } catch (error) {
-          // console.log(
-          //   `Error testing ENUM value ${enumValue}: ${
-          //     error.response?.data || error.message
-          //   }`
-          // );
+        } catch {
+          // Handle /search/ paths that require a POST-style resolution
+          if (testPath.includes('/search/')) {
+            const searchMatch = testPath.match(regex);
+            const searchParamName = searchMatch ? searchMatch[0].slice(1, -1) : null;
+            const searchParamSpec = searchParamName
+              ? specs[version].paths[path]?.get?.parameters?.find(p => p.name === searchParamName)
+              : null;
 
-          //Hard code for now. Need to find a better way to handle this.
-          if (testPath.includes("/search/")) {
-
-            const match = testPath.match(regex);
-            const paramName = match[0].slice(1, -1); // Extract the variable name without {}
-            const parameterSpec = specs[version].paths[
-              path
-            ]?.get?.parameters?.find((param) => param.name === paramName);
-
-            if (
-              parameterSpec?.["x-sailpoint-resource-operation-id"] !== undefined
-            ) {
-              const paths = findPathWithOperationId(
+            if (searchParamSpec?.['x-sailpoint-resource-operation-id'] !== undefined) {
+              const opPaths = findPathWithOperationId(
                 specs,
-                parameterSpec["x-sailpoint-resource-operation-id"][0]
+                searchParamSpec['x-sailpoint-resource-operation-id'][0]
               );
+              const searchResource = findSpecByVersion(opPaths, version);
 
-              const resource = findSpecByVersion(paths, version)
-
-              if (!resource.path.match(regex)) {
+              if (searchResource && !searchResource.path.match(regex)) {
                 resolvedPath = testPath;
-                rootPath = resource.path;
+                rootPath = searchResource.path;
 
-                const rootResponse = await httpClients[resource.version]
+                const rootResponse = await httpClients[searchResource.version]
                   .get(rootPath)
-                  .catch((error) => {
-                    console.debug(error.response.data);
-                  });
+                  .catch(() => null);
 
-                if (!rootResponse || rootResponse.data.length === 0) {
-                  //console.debug(`No data found in ${rootPath}`);
-                  return undefined;
-                }
+                if (!rootResponse || rootResponse.data.length === 0) return undefined;
 
-                let finalPath = null;
-
-                if (rootResponse.data.items) {
-                  finalPath = await findValidPathFromResponse(
-                    rootResponse.data.items,
-                    httpClients,
-                    resolvedPath,
-                    match[0]
-                  );
-                } else {
-                  finalPath = await findValidPathFromResponse(
-                    rootResponse.data,
-                    httpClients,
-                    resolvedPath,
-                    match[0]
-                  );
-                }
+                const items = rootResponse.data.items || rootResponse.data;
+                const finalPath = await findValidPathFromResponse(
+                  items,
+                  httpClients,
+                  version,
+                  resolvedPath,
+                  searchMatch[0]
+                );
 
                 resolvedPath = finalPath;
                 validResponse = true;
-
                 break;
               }
             }
@@ -443,42 +321,14 @@ async function resolvePath(version, httpClients, path, specs) {
         }
       }
 
-      if (!validResponse) {
-        // console.debug(
-        //   `Exhausted ENUM values for ${match[0]} without valid data.`
-        // );
-        return undefined;
-      }
+      if (!validResponse) return undefined;
     } else {
-      const rootResponse = await httpClients[version]
-        .get(rootPath)
-        .catch((error) => {
-          console.debug(error.response.data);
-        });
+      const rootResponse = await httpClients[version].get(rootPath).catch(() => null);
 
-      if (!rootResponse || rootResponse.data.length === 0) {
-        //console.debug(`No data found in ${rootPath}`);
-        return undefined;
-      }
+      if (!rootResponse || rootResponse.data.length === 0) return undefined;
 
-      let finalPath = null;
-
-      if (rootResponse.data.items) {
-        finalPath = await findValidPathFromResponse(
-          rootResponse.data.items,
-          httpClients,
-          resolvedPath,
-          match[0]
-        );
-      } else {
-        finalPath = await findValidPathFromResponse(
-          rootResponse.data,
-          httpClients,
-          resolvedPath,
-          match[0]
-        );
-      }
-
+      const items = rootResponse.data.items || rootResponse.data;
+      const finalPath = await findValidPathFromResponse(items, httpClients, version, resolvedPath, match[0]);
       resolvedPath = finalPath;
     }
   }
@@ -486,180 +336,232 @@ async function resolvePath(version, httpClients, path, specs) {
   return resolvedPath;
 }
 
-async function findValidPathFromResponse(
-  response,
-  httpClients,
-  path,
-  paramName
-) {
-  let identifier = findValueByKey(response[0], paramName.slice(1, -1));
-  const testPath = path.replace(paramName, identifier);
-  const regex = /{([^}]+)}/g;
-  const match = testPath.match(regex);
-  if (match) return testPath;
+// ---------------------------------------------------------------------------
+// Single-resource GET schema validator
+// ---------------------------------------------------------------------------
 
-  let resolvedPath = "";
-  if (Array.isArray(response)) {
-    for (record of response) {
-      let identifier = findValueByKey(record, paramName.slice(1, -1));
-      const testPath = path.replace(paramName, identifier);
-      // console.debug(
-      //   `Testing variable ${paramName} with value ${identifier}. Path: ${testPath}`
-      // );
+async function validateSchemaForSingleGetResource(version, httpClients, ajv, path, specs) {
+  let schema = specs[version].paths[path].get.responses['200']?.content?.['application/json']?.schema;
 
-      try {
-        const rootResponse = await httpClients["v2024"].get(testPath);
-
-        if (rootResponse.data) {
-          validResponse = rootResponse;
-          resolvedPath = path.replace(paramName, identifier);
-          // console.debug(
-          //   `Resolved variable ${paramName} with value ${identifier}. Current path: ${resolvedPath}`
-          // );
-          break;
-        } else {
-          // console.log(`No data found for value ${identifier}.`);
-        }
-      } catch (error) {
-        // console.log(
-        //   `Error testing value ${identifier}: ${
-        //     JSON.stringify(error.response?.data) ||
-        //     JSON.stringify(error.message)
-        //   }`
-        // );
+  if (schema === undefined) {
+    return {
+      method: 'GET',
+      endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.SCHEMA_NOT_FOUND],
+      errors: {
+        'Schema not found': { message: 'Schema not found under 200 response', data: null }
       }
-    }
-
-  } else if (typeof response === "object" && response !== null) {
-    let identifier = findValueByKey(response, paramName.slice(1, -1));
-    const testPath = path.replace(paramName, identifier);
-    try {
-      const rootResponse = await httpClients["v2024"].get(testPath);
-
-      if (rootResponse.data) {
-        validResponse = rootResponse;
-        resolvedPath = path.replace(paramName, identifier);
-        // console.debug(
-        //   `Resolved variable ${paramName} with value ${identifier}. Current path: ${resolvedPath}`
-        // );
-      } else {
-        //console.debug(`No data found for value ${identifier}.`);
-      }
-    } catch (error) {
-      // console.log(
-      //   `Error testing value ${identifier}: ${
-      //     JSON.stringify(error.response?.data) || JSON.stringify(error.message)
-      //   }`
-      // );
-    }
-  } else {
-    console.debug("Invalid response object");
+    };
   }
-  return resolvedPath;
+
+  if (schema.anyOf !== undefined) {
+    schema = schema.anyOf[0];
+  } else if (schema.oneOf !== undefined) {
+    schema = schema.oneOf[0];
+  }
+
+  const resolvedPath = await resolvePath(version, httpClients, path, specs);
+
+  if (!resolvedPath) {
+    return {
+      method: 'GET',
+      endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.PATH_PARAM_UNRESOLVED],
+      errors: {}
+    };
+  }
+
+  const result = await httpClients[version].get(resolvedPath).catch(() => null);
+
+  if (!result) {
+    return {
+      method: 'GET',
+      endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.API_ERROR],
+      errors: {}
+    };
+  }
+
+  if (result.data.length === 0) {
+    return {
+      method: 'GET',
+      endpoint: path,
+      tag: specs[version].paths[path].get.tags[0],
+      status: [STATUS.NO_DATA],
+      errors: {}
+    };
+  }
+
+  let uniqueErrors = {
+    method: result.request.method,
+    endpoint: path,
+    status: [],
+    tag: specs[version].paths[path].get.tags[0],
+    errors: {}
+  };
+
+  if (!ajv.validateSchema(schema)) {
+    ajv.errors.forEach((error) => {
+      if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
+        uniqueErrors.status.push(STATUS.INVALID_SCHEMA);
+      }
+      uniqueErrors.errors[error.instancePath] = {
+        message: `Invalid Schema: ${error.instancePath} - ${error.message}`,
+        data: error.data
+      };
+    });
+    return uniqueErrors;
+  }
+
+  let validate;
+  try {
+    validate = ajv.compile(normalizeNullable(schema));
+  } catch (error) {
+    uniqueErrors.errors['Invalid schema'] = { message: error.message, data: null };
+    if (!uniqueErrors.status.includes(STATUS.INVALID_SCHEMA)) {
+      uniqueErrors.status.push(STATUS.INVALID_SCHEMA);
+    }
+    return uniqueErrors;
+  }
+
+  const passesAJV = validate(result.data);
+
+  const dataArray = Array.isArray(result.data) ? result.data : [result.data];
+
+  const additionalProperties = 'items' in schema
+    ? findAdditionalProperties('', dataArray[0], schema.items.properties)
+    : findAdditionalProperties('', dataArray[0], schema.properties);
+
+  if (!passesAJV) {
+    for (const error of validate.errors) {
+      if (!(error.schemaPath in uniqueErrors.errors)) {
+        const message = `Expected that ${error.instancePath || 'response body'} ${error.message}. Actual value is ${error.data}.`;
+        if (!uniqueErrors.status.includes(STATUS.API_SCHEMA_MISMATCH)) {
+          uniqueErrors.status.push(STATUS.API_SCHEMA_MISMATCH);
+        }
+        uniqueErrors.errors[error.schemaPath] = {
+          message,
+          data: dataArray[error.instancePath.split('/')[1]]
+        };
+      }
+    }
+  }
+
+  if (additionalProperties.length > 0) {
+    for (const additionalProp of additionalProperties) {
+      const message = `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`;
+      if (!uniqueErrors.status.includes(STATUS.ADDITIONAL_PROPERTIES)) {
+        uniqueErrors.status.push(STATUS.ADDITIONAL_PROPERTIES);
+      }
+      uniqueErrors.errors[additionalProp] = { message, data: dataArray[0] };
+    }
+  }
+
+  return uniqueErrors;
 }
 
-function findValueByKey(response, keyToFind) {
-  if (typeof response !== "object" || response === null) return null;
+// ---------------------------------------------------------------------------
+// POST validator stub (not called from main flow)
+// ---------------------------------------------------------------------------
 
-  for (const key in response) {
-    if (key === keyToFind) return response[key];
+async function validateSchemaForPost(version, httpClient, ajv, path, specs) {
+  const spec = specs[version];
+  const schema = spec.paths[path].post.responses['201']
+    ? spec.paths[path].post.responses['201'].content['application/json'].schema
+    : spec.paths[path].post.responses['202'].content['application/json'].schema;
+
+  const postBody = createExample(spec.paths[path].post.requestBody.content['application/json'].schema);
+
+  const res = await httpClient.post(path, postBody).catch((error) => ({
+    errors: { 'Request failed': { message: error.response?.data?.detailCode, data: null } }
+  }));
+
+  if (res.errors !== undefined) return res;
+
+  const uniqueErrors = { method: res.request?.method, endpoint: res.request?.path, errors: {} };
+
+  if (res.data?.id) {
+    await cleanup(httpClient, path, res.data.id).catch(() => {});
   }
 
-  const identifier = response.id ? response.id : response.name;
+  let validate;
+  try {
+    validate = ajv.compile(normalizeNullable(schema));
+  } catch (error) {
+    uniqueErrors.errors['Invalid schema'] = { message: error.message, data: null };
+    return uniqueErrors;
+  }
 
-  return identifier;
-}
+  const passesAJV = validate(res.data);
+  const dataArray = Array.isArray(res.data) ? res.data : [res.data];
 
-function findAdditionalProperties(path, data, schema) {
-  let additionalProps = [];
-  for (const prop in data) {
-    if (schema != undefined) {
-      const fullPath = path === "" ? prop : path + "." + prop;
-      if (!(prop in schema)) {
-        additionalProps.push(fullPath);
-      } else if (
-        Array.isArray(data[prop]) &&
-        typeof data[prop][0] === "object" &&
-        schema[prop].type === "array" &&
-        schema[prop].items.type === "object"
-      ) {
-        const result = findAdditionalProperties(
-          fullPath,
-          data[prop][0],
-          schema[prop].items.properties
-        );
-        if (result.length > 0) {
-          additionalProps = additionalProps.concat(result);
-        }
-      } else if (
-        data[prop] != null &&
-        !Array.isArray(data[prop]) &&
-        typeof data[prop] === "object"
-      ) {
-        const result = findAdditionalProperties(
-          fullPath,
-          data[prop],
-          schema[prop].properties
-        );
-        if (result.length > 0) {
-          additionalProps = additionalProps.concat(result);
-        }
+  const additionalProperties = 'items' in schema
+    ? findAdditionalProperties('', dataArray[0], schema.items.properties)
+    : findAdditionalProperties('', dataArray[0], schema.properties);
+
+  if (!passesAJV) {
+    for (const error of validate.errors) {
+      if (!(error.schemaPath in uniqueErrors.errors)) {
+        const message = `Expected that ${error.instancePath} ${error.message}.  Actual value is ${error.data}.`;
+        uniqueErrors.errors[error.schemaPath] = {
+          message,
+          data: dataArray[error.instancePath.split('/')[1]]
+        };
       }
     }
   }
 
-  return additionalProps;
+  if (additionalProperties.length > 0) {
+    for (const additionalProp of additionalProperties) {
+      uniqueErrors.errors[additionalProp] = {
+        message: `"${additionalProp}" is an additional property returned by the server, but it is not documented in the specification.`,
+        data: dataArray[0]
+      };
+    }
+  }
+
+  return uniqueErrors;
 }
 
 function createExample(schema) {
-  if (!("readOnly" in schema) || ("readOnly" in schema && !schema.readOnly)) {
-    if (schema.type === "object") {
+  if (!('readOnly' in schema) || ('readOnly' in schema && !schema.readOnly)) {
+    if (schema.type === 'object') {
+      if ('example' in schema) return schema.example;
       const example = {};
-      if ("example" in schema) {
-        return schema.example;
-      }
-      if ("properties" in schema) {
-        for ([key, value] of Object.entries(schema.properties)) {
+      if ('properties' in schema) {
+        for (const [key, value] of Object.entries(schema.properties)) {
           example[key] = createExample(value);
         }
       }
       return example;
-    } else if (schema.type === "array") {
-      if ("example" in schema && !("example" in schema.items)) {
-        return schema.example;
-      } else {
-        return [createExample(schema.items)];
-      }
-    } else if (schema.type === "string") {
-      if ("example" in schema) {
-        return schema.example;
-      } else {
-        return "example";
-      }
-    } else if (schema.type === "integer") {
-      if ("example" in schema) {
-        return schema.example;
-      } else {
-        return 1;
-      }
-    } else if (schema.type === "boolean") {
-      if ("example" in schema) {
-        return schema.example;
-      } else {
-        return true;
-      }
+    } else if (schema.type === 'array') {
+      if ('example' in schema && !('example' in schema.items)) return schema.example;
+      return [createExample(schema.items)];
+    } else if (schema.type === 'string') {
+      return 'example' in schema ? schema.example : 'example';
+    } else if (schema.type === 'integer') {
+      return 'example' in schema ? schema.example : 1;
+    } else if (schema.type === 'boolean') {
+      return 'example' in schema ? schema.example : true;
     }
   }
 }
 
 async function cleanup(httpClient, path, id) {
-  result = await httpClient.delete(path + "/" + id).catch((error) => {
-    //console.log(error.response.data);
-  });
-
-  if (result) {
-    //console.log(`Deleted ${id} from ${path}`);
-  }
+  await httpClient.delete(path + '/' + id).catch(() => {});
 }
 
-module.exports = { validateSchemaForPost, validateSchemaForSingleGetResource, STATUS };
+module.exports = {
+  STATUS,
+  buildHttpClient,
+  findAdditionalProperties,
+  findPathWithOperationId,
+  findSpecByVersion,
+  normalizeNullable,
+  resolvePath,
+  validateSchemaForSingleGetResource,
+  validateSchemaForPost
+};

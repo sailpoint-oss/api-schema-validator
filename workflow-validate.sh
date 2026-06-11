@@ -1,8 +1,14 @@
 #!/bin/sh
 
-# This is meant to be run inside a github workflow.
+# GitHub Actions entrypoint.
+# @apidevtools/swagger-parser handles $ref resolution — no speccy required.
+# Supports both old-style (yaml/{version}/paths/) and
+# new-style (yaml/apis/{resource}/paths/) changed files.
 
-# Requires Node v16
+VERSIONS="v3 beta v2024 v2025 v2026"
+SPEC_SOURCE="../cloud-api-client-common/api-specs/src/main/yaml"
+APIS_SOURCE="${SPEC_SOURCE}/apis"
+VALIDATOR_DIR="../api-schema-validator"
 
 TESTED_PATHS=""
 
@@ -11,26 +17,42 @@ validate_paths () {
     for FILE_PATH in $FILE_PATHS
     do
         FILE_PATH_LENGTH=$(file_path_length $FILE_PATH)
-        VERSION=$(echo $FILE_PATH | cut -d "/" -f 5)
         FILE_NAME=$(echo $FILE_PATH | cut -d "/" -f $FILE_PATH_LENGTH)
 
-        # If the file is in the "paths" folder, then find which path references
-        # it in the main API file.
-        if echo $FILE_PATH | grep paths --quiet
+        # Determine if this is a new-style (apis/{resource}/...) or old-style path
+        if echo $FILE_PATH | grep "/apis/" --quiet
         then
-            API_PATH=$(grep -B 1 $FILE_NAME "${BASE_DIR}/sailpoint-api.${VERSION}.yaml" | head -n 1 | tr -d ' ' | tr -d ':')
-            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -q -x "$API_PATH"
+            # New-style: extract resource name (segment after "apis/")
+            RESOURCE=$(echo $FILE_PATH | sed 's|.*apis/\([^/]*\)/.*|\1|')
+            SPEC_DIR="${APIS_SOURCE}"
+            SPEC_IDENTIFIER="$RESOURCE"
+            MAIN_SPEC="${APIS_SOURCE}/${RESOURCE}/openapi.yaml"
+            SEARCH_DIR="${APIS_SOURCE}/${RESOURCE}"
+        else
+            # Old-style: extract version (segment after "yaml/")
+            VERSION=$(echo $FILE_PATH | cut -d "/" -f 5)
+            SPEC_DIR="${VALIDATOR_DIR}"
+            SPEC_IDENTIFIER="$VERSION"
+            MAIN_SPEC="${SPEC_SOURCE}/sailpoint-api.${VERSION}.yaml"
+            SEARCH_DIR="${SPEC_SOURCE}/${VERSION}"
+        fi
+
+        if echo $FILE_PATH | grep "/paths/" --quiet
+        then
+            API_PATH=$(grep -B 1 "$FILE_NAME" "$MAIN_SPEC" | head -n 1 | tr -d ' ' | tr -d ':')
+            DEDUPE_KEY="${SPEC_IDENTIFIER}:${API_PATH}"
+            if [ ! -z "$API_PATH" ] && ! cat tested_paths.txt | grep -q -x "$DEDUPE_KEY"
             then
-                ERRORS=$(node ../api-schema-validator/validator.js -i "$VERSION" -f "../api-schema-validator/" -p $API_PATH --github-action)
+                ERRORS=$(node "${VALIDATOR_DIR}/validator.js" -i "$SPEC_IDENTIFIER" -f "${SPEC_DIR}/" -p "$API_PATH" --github-action)
                 if [ ! -z "$ERRORS" ]
                 then
                     echo $ERRORS
                 fi
-                echo $API_PATH >> tested_paths.txt
+                echo "$DEDUPE_KEY" >> tested_paths.txt
             fi
-        elif echo $FILE_PATH | grep schemas --quiet
+        elif echo $FILE_PATH | grep "/schemas/" --quiet
         then
-            MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "${BASE_DIR}/$VERSION")
+            MATCHING_FILE_PATHS=$(grep -lr "/${FILE_NAME}" "$SEARCH_DIR")
             validate_paths $MATCHING_FILE_PATHS
         fi
     done
@@ -40,10 +62,13 @@ file_path_length () {
     echo $1 | tr "/" " " | wc -w
 }
 
-# Build the API spec
-speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v3.yaml -o v3.yaml
-speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.beta.yaml -o beta.yaml
-speccy resolve --quiet ../cloud-api-client-common/api-specs/src/main/yaml/sailpoint-api.v2024.yaml -o v2024.yaml
+# Stage old-style version specs (swagger-parser reads them from VALIDATOR_DIR)
+for VERSION in $VERSIONS; do
+  SRC="${SPEC_SOURCE}/sailpoint-api.${VERSION}.yaml"
+  if [ -f "$SRC" ]; then
+    cp "$SRC" "${VALIDATOR_DIR}/${VERSION}.yaml"
+  fi
+done
 
 cd ../cloud-api-client-common
 BASE_DIR="api-specs/src/main/yaml"

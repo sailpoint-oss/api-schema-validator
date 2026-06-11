@@ -109,7 +109,7 @@ async function testSorters(httpClient, path, propertiesToTest, documentedSorters
     return propertiesToTest
 }
 
-async function validateSorters(httpClient, method, version, path, spec) {
+async function validateSorters(httpClient, method, path, spec) {
     let uniqueErrors = {
         method: method.toUpperCase(),
         endpoint: path,
